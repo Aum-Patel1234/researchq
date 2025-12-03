@@ -1,0 +1,99 @@
+name: CI (uv + Python 3.12)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system packages (faiss deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev libomp-dev build-essential
+
+      - name: Install uv
+        # Installs uv to $HOME/.local/bin
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify uv & python
+        run: |
+          uv --version
+          python -V
+
+      - name: Restore caches (pip + uv)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/uv
+          key: ${{ runner.os }}-uv-3.12-${{ hashFiles('**/requirements.txt','**/pyproject.toml','uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-3.12-
+
+      - name: Install dependencies using uv
+        run: |
+          # create a local venv for project (optional but reproducible)
+          uv venv
+          # install pinned deps; uv pip uses fast resolver and wheel cache
+          uv pip install --upgrade pip setuptools wheel
+          uv pip install -r requirements.txt
+          # install dev tools into the same environment
+          uv pip install ruff pytest
+
+      - name: Lint (ruff) using uv
+        run: |
+          uv run ruff check .
+
+      - name: Run tests (pytest) using uv
+        run: |
+          if [ -d tests ] || ls -1 | grep -q "test_"; then
+            uv run pytest -q
+          else
+            echo "No tests found — skipping pytest"
+          fi
+
+      - name: Smoke import check (using uv Python)
+        run: |
+          uv run python - <<'PY'
+          import importlib, sys
+          modules = [
+              "langchain",
+              "langchain_community",
+              "langchain_openai",
+              "langgraph",
+              "openai",
+              "faiss",
+              "pydantic",
+              "dotenv",
+              "bs4",
+              "requests",
+              "streamlit",
+          ]
+          failed = False
+          for m in modules:
+              try:
+                  importlib.import_module(m)
+                  print("OK  -", m)
+              except Exception as e:
+                  print("FAIL -", m, ":", e)
+                  failed = True
+          if failed:
+              sys.exit(2)
+          PY
