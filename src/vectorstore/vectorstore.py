@@ -1,8 +1,5 @@
-# sentence-transformers/all-mpnet-base-v2
-# there are 4 of use each Pinecode db for exactly one subject like 1 for nlp...
-
 from langchain_huggingface import HuggingFaceEmbeddings
-from typing import List, Union
+from typing import List
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 
