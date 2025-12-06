@@ -8,9 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from pathlib import Path
 from langchain_community.document_loaders import (
-    WebBaseLoader,
     PyPDFLoader,
-    PyPDFDirectoryLoader,
 )
 
 
@@ -51,7 +49,7 @@ class DocumentProcessor:
             List[Document]: Extracted PDF pages.
         """
         file_path = Path(file_path)
-        loader = PyPDFDirectoryLoader(str(file_path))
+        loader = PyPDFLoader(str(file_path))
         return loader.load()
 
     def load_pdf_from_url(self, url: str) -> List[Document]:

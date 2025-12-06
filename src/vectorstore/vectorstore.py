@@ -26,7 +26,9 @@ class VectorStore:
         self.vectorstore = None
         self.retriever = None
 
-    def create_retriever(self, documents: List[Document]) -> None:
+    def create_retriever(
+        self, documents: List[Document], search_kwargs: dict = None
+    ) -> None:
         """
         Build a vector store from a list of documents and initialize the retriever.
 
@@ -34,6 +36,8 @@ class VectorStore:
         ----------
         documents : List[Document]
             List of LangChain Document objects containing text + metadata.
+        search_kwargs : dict, optional
+            Additional search parameters for the retriever (e.g., {"k": 4}).
 
         Notes
         -----
@@ -41,7 +45,9 @@ class VectorStore:
         - Computes embeddings for all documents and stores them in FAISS.
         """
         self.vectorstore = FAISS.from_documents(documents, self.embedding_model)
-        self.retriever = self.vectorstore.as_retriever()
+        if search_kwargs is None:
+            search_kwargs = {"k": 4}
+        self.retriever = self.vectorstore.as_retriever(search_kwargs=search_kwargs)
 
     def get_retriever(self):
         """
@@ -57,7 +63,7 @@ class VectorStore:
         ValueError
             If the retriever has not been initialized yet.
         """
-        if self.retriever == None:
+        if self.retriever is None:
             raise ValueError("VectorStore not initialized.")
         return self.retriever
 
