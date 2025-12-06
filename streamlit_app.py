@@ -1,12 +1,13 @@
 """
 streamlit_app.py
-Streamlit UI for Agentic RAG System (matches your project layout)
+Robust Streamlit UI for Agentic RAG System
 
-Features:
-- Uses Config.get_llm(), DocumentProcessor, VectorStore, GraphBuilder from src/
-- Ingest DEFAULT_URLS or upload PDF files
-- Build FAISS index & Graph
-- Ask questions and display long answers + retrieved chunks
+This version includes:
+- Better error handling and logging
+- Improved UI/UX
+- Debug mode for troubleshooting
+- Proper initialization of components
+- Clear error messages
 """
 
 import streamlit as st
@@ -15,260 +16,434 @@ import sys
 import time
 import tempfile
 import os
-from typing import List
+import logging
+from typing import List, Any, Optional, Dict, Union
+import traceback
 
-# Ensure src is importable (adjust if your package layout differs)
-sys.path.append(str(Path(__file__).parent / "src"))
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
-from config.config import Config  # relative to src/config/config.py
-from document_ingestion.document_processor import DocumentProcessor
-from vectorstore.vectorstore import VectorStore
-from graph_builder.graph_builder import GraphBuilder
-from langchain_core.documents import Document as LcDocument
+# Add src to path
+SRC_PATH = Path(__file__).parent / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.append(str(SRC_PATH))
 
-st.set_page_config(page_title="🔬 Research RAG", layout="centered")
-
-st.markdown(
-    """
-    <style>
-    .stButton > button { width: 100%; font-weight: 600; }
-    .stTextInput, .stTextArea { width: 100%; }
-    </style>
-    """,
-    unsafe_allow_html=True,
+# Set page config
+st.set_page_config(
+    page_title="🔬 Research RAG", 
+    layout="centered",
+    initial_sidebar_state="expanded"
 )
 
+# Custom CSS for better UI
+st.markdown("""
+    <style>
+    .stButton > button {
+        width: 100%; 
+        font-weight: 600;
+        margin: 0.5rem 0;
+    }
+    .stTextInput, .stTextArea { 
+        width: 100%; 
+    }
+    .debug-info {
+        font-family: monospace;
+        font-size: 0.8em;
+        background-color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .error-message {
+        color: #ff4b4b;
+        font-weight: bold;
+    }
+    .success-message {
+        color: #00c853;
+        font-weight: bold;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # -------------------------
-# Helpers / Cached resources
+# Safe import helpers with logging
+# -------------------------
+def safe_import(module_path: str, class_name: str = None, default=None):
+    """
+    Safely import a module or class with error handling and logging.
+    """
+    try:
+        logger.info(f"Attempting to import {module_path}.{class_name if class_name else ''}")
+        if class_name:
+            module = __import__(module_path, fromlist=[class_name])
+            result = getattr(module, class_name, default)
+        else:
+            result = __import__(module_path)
+        logger.info(f"Successfully imported {module_path}.{class_name if class_name else ''}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to import {module_path}.{class_name if class_name else ''}: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return default
+
+# -------------------------
+# Initialize components with error handling
+# -------------------------
+def init_components():
+    """Initialize all required components with error handling."""
+    components = {
+        'Config': None,
+        'DocumentProcessor': None,
+        'VectorStore': None,
+        'GraphBuilder': None,
+        'RAGState': None
+    }
+    
+    # Import Config
+    try:
+        from config.config import Config as ConfigClass
+        components['Config'] = ConfigClass
+        logger.info("Successfully imported Config")
+    except ImportError as e:
+        logger.error(f"Failed to import Config: {str(e)}")
+        st.error("❌ Failed to import configuration. Please check config.py")
+    
+    # Import DocumentProcessor
+    try:
+        from document_ingestion.document_processor import DocumentProcessor as DocumentProcessorClass
+        components['DocumentProcessor'] = DocumentProcessorClass
+        logger.info("Successfully imported DocumentProcessor")
+    except ImportError as e:
+        logger.error(f"Failed to import DocumentProcessor: {str(e)}")
+        st.error("❌ Failed to import DocumentProcessor. Check document_ingestion/")
+    
+    # Import VectorStore
+    try:
+        from vectorstore.vectorstore import VectorStore as VectorStoreClass
+        components['VectorStore'] = VectorStoreClass
+        logger.info("Successfully imported VectorStore")
+    except ImportError as e:
+        logger.error(f"Failed to import VectorStore: {str(e)}")
+        st.error("❌ Failed to import VectorStore. Check vectorstore/")
+    
+    # Import GraphBuilder and RAGState
+    try:
+        from graph_builder.graph_builder import GraphBuilder as GraphBuilderClass
+        from state.rag_state import RAGState as RAGStateClass
+        components['GraphBuilder'] = GraphBuilderClass
+        components['RAGState'] = RAGStateClass
+        logger.info("Successfully imported GraphBuilder and RAGState")
+    except ImportError as e:
+        logger.error(f"Failed to import GraphBuilder/RAGState: {str(e)}")
+        st.error("❌ Failed to import GraphBuilder or RAGState. Check graph_builder/ and state/")
+    
+    return components
+
+# Initialize components
+components = init_components()
+
+# -------------------------
+# Cached resources with error handling
 # -------------------------
 @st.cache_resource(show_spinner=False)
-def init_processor() -> DocumentProcessor:
-    return DocumentProcessor(
-        chunk_size=Config.CHUNK_SIZE, chunk_overlap=Config.CHUNK_OVERLAP
-    )
-
+def get_document_processor():
+    """Initialize and return DocumentProcessor with error handling."""
+    if not components['DocumentProcessor']:
+        raise ImportError("DocumentProcessor not available. Check the logs for details.")
+    
+    try:
+        # Get chunking parameters from Config if available
+        chunk_size = 500
+        chunk_overlap = 50
+        
+        if components['Config']:
+            chunk_size = getattr(components['Config'], 'CHUNK_SIZE', chunk_size)
+            chunk_overlap = getattr(components['Config'], 'CHUNK_OVERLAP', chunk_overlap)
+        
+        logger.info(f"Initializing DocumentProcessor with chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
+        return components['DocumentProcessor'](
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+    except Exception as e:
+        logger.error(f"Error initializing DocumentProcessor: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise
 
 @st.cache_resource(show_spinner=False)
-def init_llm():
-    """Return the LLM instance from Config."""
-    return Config.get_llm()
-
+def get_llm():
+    """Initialize and return the LLM with error handling."""
+    if not components['Config']:
+        raise ImportError("Config not available. Check the logs for details.")
+    
+    try:
+        logger.info("Initializing LLM...")
+        config = components['Config']
+        
+        # Try different ways to get the LLM
+        if hasattr(config, 'get_llm') and callable(config.get_llm):
+            logger.info("Using Config.get_llm()")
+            return config.get_llm()
+        elif hasattr(config, 'LLM'):
+            logger.info("Using Config.LLM")
+            return config.LLM
+        elif hasattr(config, 'llm'):
+            logger.info("Using config.llm")
+            return config.llm
+        else:
+            raise AttributeError("No valid LLM configuration found in Config")
+    except Exception as e:
+        logger.error(f"Error initializing LLM: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise
 
 @st.cache_resource(show_spinner=False)
-def init_vector_store(embedding_model: str):
-    """Return an empty VectorStore instance (with embedding model)."""
-    return VectorStore(embedding_model)
+def get_vector_store(embedding_model: str = None):
+    """Initialize and return VectorStore with error handling."""
+    if not components['VectorStore']:
+        raise ImportError("VectorStore not available. Check the logs for details.")
+    
+    try:
+        logger.info(f"Initializing VectorStore with embedding_model={embedding_model}")
+        if embedding_model:
+            return components['VectorStore'](embedding_model=embedding_model)
+        return components['VectorStore'](embedding_model="sentence-transformers/all-mpnet-base-v2")
+    except Exception as e:
+        logger.error(f"Error initializing VectorStore: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise
 
+# -------------------------
+# Helper functions
+# -------------------------
+def save_uploaded_file(uploaded_file) -> Path:
+    """Save uploaded file to a temporary location."""
+    try:
+        suffix = Path(uploaded_file.name).suffix or ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(uploaded_file.getbuffer())
+            logger.info(f"Saved uploaded file to {tmp.name}")
+            return Path(tmp.name)
+    except Exception as e:
+        logger.error(f"Error saving uploaded file: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise
 
-def save_uploaded_file(uploaded) -> Path:
-    suffix = Path(uploaded.name).suffix or ".pdf"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded.getbuffer())
-        return Path(tmp.name)
+def process_documents(docs: List[Any], processor) -> List[Any]:
+    """Process documents with error handling."""
+    try:
+        logger.info(f"Processing {len(docs)} documents")
+        processed_docs = []
+        for doc in docs:
+            if hasattr(processor, 'process_document'):
+                processed_docs.append(processor.process_document(doc))
+            else:
+                processed_docs.append(doc)
+        return processed_docs
+    except Exception as e:
+        logger.error(f"Error processing documents: {str(e)}")
+        logger.debug(traceback.format_exc())
+        raise
 
-
-def normalize_result(result):
-    """
-    Normalize graph result to dict with keys: answer (str), retrieved_docs (List[Document])
-    Accepts dict-like or object-like results.
-    """
-    if result is None:
-        return {"answer": None, "retrieved_docs": []}
-
-    # dict-like
-    if isinstance(result, dict):
-        answer = (
-            result.get("answer") or result.get("output") or result.get("result") or None
-        )
-        docs = (
-            result.get("retrieved_docs")
-            or result.get("retrieved")
-            or result.get("docs")
-            or []
-        )
-        return {"answer": answer, "retrieved_docs": docs}
-
-    # object-like (RAGState)
-    answer = getattr(result, "answer", None)
-    docs = getattr(result, "retrieved_docs", []) or getattr(result, "retrieved", [])
-    # if docs are stored in attribute 'documents'
+def display_document_info(docs: List[Any]):
+    """Display information about the processed documents."""
     if not docs:
-        docs = getattr(result, "documents", [])
-    return {"answer": answer, "retrieved_docs": docs}
-
-
-def ensure_node_name_compat(graph_builder: GraphBuilder):
-    """
-    GraphBuilder.build() in your repo expects a node method name 'generate_anser' (typo),
-    while some node implementations use 'generate_answer'. Patch the node object if needed.
-    """
-    nodes = getattr(graph_builder, "nodes", None)
-    if not nodes:
+        st.warning("No documents to display.")
         return
-    # if nodes has generate_answer but not generate_anser, alias it
-    if hasattr(nodes, "generate_answer") and not hasattr(nodes, "generate_anser"):
-        setattr(nodes, "generate_anser", getattr(nodes, "generate_answer"))
-
+    
+    st.subheader("📄 Processed Documents")
+    for i, doc in enumerate(docs, 1):
+        with st.expander(f"Document {i} (Click to expand)"):
+            st.json({
+                "Page Content": doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content,
+                "Metadata": doc.metadata
+            })
 
 # -------------------------
-# UI / Main
+# Main UI
 # -------------------------
 def main():
-    st.title("🔬 Research Paper RAG — Assistant")
-    st.write(
-        "Ingest PDFs (upload or URL), build index, then ask long research-style questions."
-    )
-
+    st.title("🔬 Research Paper RAG System")
+    st.markdown("Upload research papers or enter URLs to ask questions about them.")
+    
+    # Debug mode toggle
+    debug_mode = st.sidebar.checkbox("Enable Debug Mode", value=False)
+    if debug_mode:
+        st.sidebar.subheader("Debug Information")
+        st.sidebar.json({
+            "Python Version": sys.version,
+            "Working Directory": os.getcwd(),
+            "System Path": sys.path
+        })
+    
     # Initialize session state
-    if "initialized" not in st.session_state:
-        st.session_state.initialized = False
-    if "graph_builder" not in st.session_state:
-        st.session_state.graph_builder = None
-    if "vector_store" not in st.session_state:
+    if 'documents' not in st.session_state:
+        st.session_state.documents = []
+    if 'vector_store' not in st.session_state:
         st.session_state.vector_store = None
-    if "last_documents" not in st.session_state:
-        st.session_state.last_documents = []
-
-    processor = init_processor()
-
-    st.sidebar.header("Initialization")
-    if st.sidebar.button("Initialize system (load DEFAULT_URLS)"):
-        with st.spinner("Loading default documents and building index..."):
+    if 'retriever' not in st.session_state:
+        st.session_state.retriever = None
+    
+    # Sidebar for document upload
+    with st.sidebar:
+        st.header("📂 Document Upload")
+        
+        # File upload
+        uploaded_files = st.file_uploader(
+            "Upload PDFs or text files",
+            type=['pdf', 'txt'],
+            accept_multiple_files=True
+        )
+        
+        # URL input
+        st.subheader("Or enter URLs")
+        urls = st.text_area(
+            "Enter one URL per line",
+            value="\n".join(getattr(components['Config'], 'DEFAULT_URLS', [])),
+            height=100
+        )
+        
+        process_btn = st.button("Process Documents", type="primary")
+    
+    # Process documents when button is clicked
+    if process_btn:
+        with st.spinner("Processing documents..."):
             try:
-                llm = init_llm()
-                # ingest default URLs
-                urls = getattr(Config, "DEFAULT_URLS", [])
-                docs_all: List[LcDocument] = []
-                for u in urls:
-                    # try to load as PDF first, fall back to web page loader
+                processor = get_document_processor()
+                docs = []
+                
+                # Process uploaded files
+                for uploaded_file in uploaded_files:
                     try:
-                        docs = processor.load_pdf_from_url(u)
-                    except Exception:
-                        docs = processor.load_from_url(u)
-                    # chunk if needed
-                    docs_all.extend(processor.split_documents(docs))
-
-                st.session_state.last_documents = docs_all
-
-                # create vectorstore
-                vs = init_vector_store(Config.EMBEDDING_MODEL)
-                vs.create_retriever(st.session_state.last_documents)
-                st.session_state.vector_store = vs
-
-                # build graph
-                gb = GraphBuilder(retriever=vs.get_retriever(), llm=llm)
-                # patch node name mismatches if necessary
-                ensure_node_name_compat(gb)
-                gb.build()
-                st.session_state.graph_builder = gb
-                st.session_state.initialized = True
-                st.success(f"Initialized. Loaded {len(docs_all)} chunks.")
-            except Exception as e:
-                st.exception(f"Initialization failed: {e}")
-
-    st.sidebar.markdown("---")
-    st.sidebar.header("Manual ingestion")
-    uploaded = st.sidebar.file_uploader(
-        "Upload PDF(s)", type=["pdf"], accept_multiple_files=True
-    )
-    pdf_url = st.sidebar.text_input("Or paste a direct PDF URL")
-
-    if st.sidebar.button("Ingest now"):
-        with st.spinner("Ingesting files/URL..."):
-            docs_all: List[LcDocument] = st.session_state.get("last_documents", [])
-            # upload files
-            if uploaded:
-                for f in uploaded:
-                    try:
-                        path = save_uploaded_file(f)
-                        docs = processor.load_from_pdf(str(path))
-                        docs_all.extend(processor.split_documents(docs))
-                        os.remove(path)
+                        file_path = save_uploaded_file(uploaded_file)
+                        if file_path.suffix.lower() == '.pdf':
+                            file_docs = processor.load_from_pdf(file_path)
+                        else:
+                            with open(file_path, 'r') as f:
+                                text = f.read()
+                                from langchain_core.documents import Document
+                                file_docs = [Document(page_content=text)]
+                        docs.extend(file_docs)
+                        os.unlink(file_path)  # Clean up temp file
                     except Exception as e:
-                        st.error(f"Failed to process {f.name}: {e}")
-            # pdf url
-            if pdf_url:
+                        st.error(f"Error processing {uploaded_file.name}: {str(e)}")
+                        logger.error(f"Error processing {uploaded_file.name}: {str(e)}")
+                        logger.debug(traceback.format_exc())
+                
+                # Process URLs
+                for url in urls.strip().split('\n'):
+                    url = url.strip()
+                    if not url:
+                        continue
+                    try:
+                        if url.lower().endswith('.pdf'):
+                            url_docs = processor.load_pdf_from_url(url)
+                        else:
+                            url_docs = processor.load_from_url(url)
+                        docs.extend(url_docs)
+                    except Exception as e:
+                        st.error(f"Error processing URL {url}: {str(e)}")
+                        logger.error(f"Error processing URL {url}: {str(e)}")
+                        logger.debug(traceback.format_exc())
+                
+                if docs:
+                    # Split documents into chunks
+                    split_docs = processor.split_documents(docs)
+                    st.session_state.documents = split_docs
+                    
+                    # Initialize vector store
+                    embedding_model = getattr(components['Config'], 'EMBEDDING_MODEL', None)
+                    vector_store = get_vector_store(embedding_model)
+                    vector_store.create_retriever(split_docs)
+                    st.session_state.vector_store = vector_store
+                    st.session_state.retriever = vector_store.get_retriever()
+                    
+                    st.success(f"✅ Processed {len(split_docs)} document chunks")
+                    if debug_mode:
+                        st.json({
+                            "Total Documents": len(split_docs),
+                            "Sample Document": {
+                                "content": split_docs[0].page_content[:200] + "...",
+                                "metadata": split_docs[0].metadata
+                            }
+                        })
+                else:
+                    st.warning("No valid documents were processed.")
+            
+            except Exception as e:
+                st.error(f"An error occurred while processing documents: {str(e)}")
+                logger.error(f"Document processing error: {str(e)}")
+                logger.debug(traceback.format_exc())
+    
+    # Display processed documents if available
+    if st.session_state.documents:
+        display_document_info(st.session_state.documents)
+        
+        # Question input
+        st.divider()
+        st.subheader("❓ Ask a Question")
+        question = st.text_input("Enter your question about the documents")
+        
+        if question:
+            with st.spinner("Searching for answers..."):
                 try:
-                    docs = processor.load_pdf_from_url(pdf_url)
-                    docs_all.extend(processor.split_documents(docs))
+                    if not st.session_state.retriever:
+                        raise ValueError("Document retriever not initialized. Please process documents first.")
+                    
+                    # Get relevant documents
+                    relevant_docs = st.session_state.retriever.invoke(question, k=3)
+                    
+                    # Display relevant documents
+                    st.subheader("📚 Relevant Context")
+                    for i, doc in enumerate(relevant_docs, 1):
+                        with st.expander(f"Context {i}"):
+                            st.write(doc.page_content)
+                            st.caption(f"Source: {doc.metadata.get('source', 'Unknown')}")
+                    
+                    # Generate answer using LLM
+                    llm = get_llm()
+                    from state.rag_state import RAGState
+                    from graph_builder.graph_builder import GraphBuilder
+                    
+                    # Initialize graph builder
+                    graph_builder = GraphBuilder(
+                        retriever=st.session_state.retriever,
+                        llm=llm
+                    )
+                    
+                    # Run the graph
+                    result = graph_builder.run(question)
+                    
+                    # Display answer
+                    st.subheader("💡 Answer")
+                    st.markdown(result.answer)
+                    
+                    # Debug info
+                    if debug_mode:
+                        st.subheader("🔍 Debug Information")
+                        st.json({
+                            "Question": question,
+                            "Retrieved Documents": len(relevant_docs),
+                            "Answer Length": len(result.answer) if result.answer else 0
+                        })
+                
                 except Exception as e:
-                    st.error(f"Failed to download/load PDF: {e}")
-
-            if docs_all:
-                st.session_state.last_documents = docs_all
-                # (re)create vectorstore
-                try:
-                    vs = init_vector_store(Config.EMBEDDING_MODEL)
-                    vs.create_retriever(docs_all)
-                    st.session_state.vector_store = vs
-                    st.success(f"Ingested and indexed {len(docs_all)} chunks.")
-                except Exception as e:
-                    st.exception(f"Failed to build vectorstore: {e}")
-            else:
-                st.info("No documents ingested.")
-
-    st.markdown("---")
-
-    # Query area
-    st.header("Ask a question about loaded papers")
-    question = st.text_area(
-        "Question",
-        height=120,
-        placeholder="Ask about methods, equations, comparisons, etc.",
-    )
-    cols = st.columns([1, 1, 1])
-    temp = cols[0].slider("Temperature", 0.0, 1.0, 0.2, 0.1)
-    top_k = cols[1].number_input(
-        "Top-k chunks", min_value=1, max_value=20, value=6, step=1
-    )
-    run_btn = cols[2].button("Get Answer")
-
-    if run_btn:
-        if not st.session_state.initialized or st.session_state.graph_builder is None:
-            st.error(
-                "System not initialized. Initialize first (sidebar) or ingest documents."
-            )
-        elif not question.strip():
-            st.error("Please enter a question.")
-        else:
-            gb: GraphBuilder = st.session_state.graph_builder
-            # Ensure nodes compatibility (in case graph_builder was created before patch)
-            ensure_node_name_compat(gb)
-
-            with st.spinner("Running RAG graph..."):
-                start = time.time()
-                try:
-                    raw = gb.run(question)  # may return dict or RAGState-like object
-                except Exception as e:
-                    st.exception(f"Graph execution failed: {e}")
-                    raw = None
-                elapsed = time.time() - start
-
-            normalized = normalize_result(raw)
-            answer = normalized["answer"] or "No answer generated."
-            docs = normalized["retrieved_docs"] or []
-
-            st.markdown("### Answer")
-            st.success(answer)
-
-            st.markdown("### Retrieved Chunks (top-k)")
-            for i, d in enumerate(docs[:top_k], start=1):
-                meta = getattr(d, "metadata", {}) or {}
-                title = meta.get("title") or meta.get("source") or f"doc_{i}"
-                st.markdown(f"**[{i}] {title}**")
-                st.text_area(
-                    f"Chunk {i}", value=d.page_content[:2000], height=120, disabled=True
-                )
-
-            st.caption(f"Response time: {elapsed:.2f}s")
-
-    # history & simple status
-    st.markdown("---")
-    st.subheader("Status")
-    st.write(f"Initialized: {st.session_state.initialized}")
-    st.write(f"Indexed chunks: {len(st.session_state.get('last_documents', []))}")
-
+                    st.error(f"An error occurred while generating an answer: {str(e)}")
+                    logger.error(f"Answer generation error: {str(e)}")
+                    logger.debug(traceback.format_exc())
+    
+    # Display error if no documents processed
+    elif process_btn:
+        st.warning("No documents were processed. Please check your inputs and try again.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.critical(f"Critical error in main: {str(e)}", exc_info=True)
+        st.error("A critical error occurred. Please check the logs for more details.")

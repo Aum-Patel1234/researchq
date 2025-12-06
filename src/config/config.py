@@ -23,14 +23,14 @@ class Config:
     DEFAULT_URLS = [
         # Attention Is All You Need (Transformer)
         "https://arxiv.org/pdf/1706.03762.pdf",
-        # BERT: Pre-training of Deep Bidirectional Transformers
-        "https://arxiv.org/pdf/1810.04805.pdf",
-        # GPT-3: Language Models are Few-Shot Learners
-        "https://arxiv.org/pdf/2005.14165.pdf",
-        # LLaMA: Open and Efficient Foundation Language Models
-        "https://arxiv.org/pdf/2302.13971.pdf",
-        # Diffusion Models: Denoising Diffusion Probabilistic Models
-        "https://arxiv.org/pdf/2006.11239.pdf",
+        # # BERT: Pre-training of Deep Bidirectional Transformers
+        # "https://arxiv.org/pdf/1810.04805.pdf",
+        # # GPT-3: Language Models are Few-Shot Learners
+        # "https://arxiv.org/pdf/2005.14165.pdf",
+        # # LLaMA: Open and Efficient Foundation Language Models
+        # "https://arxiv.org/pdf/2302.13971.pdf",
+        # # Diffusion Models: Denoising Diffusion Probabilistic Models
+        # "https://arxiv.org/pdf/2006.11239.pdf",
     ]
 
     @classmethod
