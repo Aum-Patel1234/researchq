@@ -19,6 +19,18 @@ import logging
 from typing import List, Any
 import traceback
 
+
+from src.config.config import Config as ConfigClass
+from src.document_ingestion.document_processor import (
+    DocumentProcessor as DocumentProcessorClass,
+)
+
+from src.vectorstore.vectorstore import VectorStore as VectorStoreClass
+from src.graph_builder.graph_builder import GraphBuilder as GraphBuilderClass
+from src.state.rag_state import RAGState as RAGStateClass
+from src.streamlithelper import display_rag_result, extract_answer_from_result
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -72,50 +84,20 @@ st.markdown(
 
 
 # -------------------------
-# Safe import helpers with logging
-# -------------------------
-def safe_import(module_path: str, class_name: str = None, default=None):
-    """
-    Safely import a module or class with error handling and logging.
-    """
-    try:
-        logger.info(
-            f"Attempting to import {module_path}.{class_name if class_name else ''}"
-        )
-        if class_name:
-            module = __import__(module_path, fromlist=[class_name])
-            result = getattr(module, class_name, default)
-        else:
-            result = __import__(module_path)
-        logger.info(
-            f"Successfully imported {module_path}.{class_name if class_name else ''}"
-        )
-        return result
-    except Exception as e:
-        logger.error(
-            f"Failed to import {module_path}.{class_name if class_name else ''}: {str(e)}"
-        )
-        logger.debug(traceback.format_exc())
-        return default
-
-
-# -------------------------
 # Initialize components with error handling
 # -------------------------
 def init_components():
     """Initialize all required components with error handling."""
-    components = {
-        "Config": None,
-        "DocumentProcessor": None,
-        "VectorStore": None,
-        "GraphBuilder": None,
-        "RAGState": None,
+    components: dict[str, type] = {
+        "Config": ConfigClass,
+        "DocumentProcessor": DocumentProcessorClass,
+        "VectorStore": VectorStoreClass,
+        "GraphBuilder": GraphBuilderClass,
+        "RAGState": RAGStateClass,
     }
 
     # Import Config
     try:
-        from src.config.config import Config as ConfigClass
-
         components["Config"] = ConfigClass
         logger.info("Successfully imported Config")
     except ImportError as e:
@@ -124,10 +106,6 @@ def init_components():
 
     # Import DocumentProcessor
     try:
-        from src.document_ingestion.document_processor import (
-            DocumentProcessor as DocumentProcessorClass,
-        )
-
         components["DocumentProcessor"] = DocumentProcessorClass
         logger.info("Successfully imported DocumentProcessor")
     except ImportError as e:
@@ -136,8 +114,6 @@ def init_components():
 
     # Import VectorStore
     try:
-        from src.vectorstore.vectorstore import VectorStore as VectorStoreClass
-
         components["VectorStore"] = VectorStoreClass
         logger.info("Successfully imported VectorStore")
     except ImportError as e:
@@ -146,9 +122,6 @@ def init_components():
 
     # Import GraphBuilder and RAGState
     try:
-        from src.graph_builder.graph_builder import GraphBuilder as GraphBuilderClass
-        from src.state.rag_state import RAGState as RAGStateClass
-
         components["GraphBuilder"] = GraphBuilderClass
         components["RAGState"] = RAGStateClass
         logger.info("Successfully imported GraphBuilder and RAGState")
@@ -228,7 +201,7 @@ def get_llm():
 
 
 @st.cache_resource(show_spinner=False)
-def get_vector_store(embedding_model: str = None):
+def get_vector_store(embedding_model: str | None = None):
     """Initialize and return VectorStore with error handling."""
     if not components["VectorStore"]:
         raise ImportError("VectorStore not available. Check the logs for details.")
@@ -291,9 +264,11 @@ def display_document_info(docs: List[Any]):
         with st.expander(f"Document {i} (Click to expand)"):
             st.json(
                 {
-                    "Page Content": doc.page_content[:500] + "..."
-                    if len(doc.page_content) > 500
-                    else doc.page_content,
+                    "Page Content": (
+                        doc.page_content[:500] + "..."
+                        if len(doc.page_content) > 500
+                        else doc.page_content
+                    ),
                     "Metadata": doc.metadata,
                 }
             )
@@ -465,15 +440,11 @@ def main():
 
                     # Display answer (result is RAGState object)
                     st.subheader("💡 Answer")
-                    answer_text = (
-                        result.answer
-                        if hasattr(result, "answer") and result.answer
-                        else str(result)
-                    )
-                    st.markdown(answer_text)
+                    display_rag_result(result)
 
                     # Debug info
                     if debug_mode:
+                        answer_text = extract_answer_from_result(result)
                         st.subheader("🔍 Debug Information")
                         st.json(
                             {

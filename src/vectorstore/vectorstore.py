@@ -27,7 +27,7 @@ class VectorStore:
         self.retriever = None
 
     def create_retriever(
-        self, documents: List[Document], search_kwargs: dict = None
+        self, documents: List[Document], search_kwargs: dict | None = None
     ) -> None:
         """
         Build a vector store from a list of documents and initialize the retriever.

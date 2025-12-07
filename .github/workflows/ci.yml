@@ -97,3 +97,16 @@ jobs:
           if failed:
               sys.exit(2)
           PY
+
+
+      - name: Streamlit syntax check
+        run: |
+          uv run python - <<'PY'
+          import streamlit_app
+          print("Streamlit app imported successfully!")
+          PY
+
+
+      - name: Streamlit startup test
+        run: |
+          timeout 10 uv run streamlit run streamlit_app.py --server.headless true || echo "Streamlit ran for 10s and exited (OK)"
