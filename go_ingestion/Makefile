@@ -1,15 +1,16 @@
 APP_NAME=go_ingestion
-CMD=./cmd/ingestion   # change if main.go is in root
+CMD=./main.go    # change if main.go is in root
 BINARY=bin/$(APP_NAME)
 
 deps:
 	go mod tidy
+	go mod vendor
 
 build:
 	go build -o $(BINARY) $(CMD)
 
 run:
-	go run $(CMD)
+	./bin/go_ingestion
 
 test:
 	go test ./... -v
@@ -19,7 +20,7 @@ fmt:
 	go vet ./...
 
 clean:
-	rm -rf bin
+	rm -rf bin vendor
 
 docker-build:
 	docker build -t $(APP_NAME):latest .

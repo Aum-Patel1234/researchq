@@ -9,7 +9,6 @@ wheels/
 # env and data
 data/
 .env
-go_ingestion/config/config.yaml
 
 # Virtual environments
 .venv
