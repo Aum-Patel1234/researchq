@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"go_ingestion/db"
+	researchpaperapis "go_ingestion/internal/research_paper_apis"
 	"log"
-	"os"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 )
 
@@ -17,17 +17,30 @@ func main() {
 		return
 	}
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatal("❌ DATABASE_URL not set in environment or .env file")
+	conn := db.ConnectToDb()
+	defer conn.Close(context.Background())
+
+	// temp
+	arxivEntries, err := researchpaperapis.GetArxivResponse("nlp")
+	if err != nil {
+		fmt.Println("GET req failed")
+		return
 	}
 
-	conn, err := pgx.Connect(context.Background(), databaseURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
+	var pdfLinks []string
+	for _, e := range arxivEntries {
+		pdfURL := researchpaperapis.GetPDFLink(e)
+		fmt.Println(e.ID)
+		if pdfURL != "" {
+			pdfLinks = append(pdfLinks, pdfURL)
+		}
 	}
-	defer conn.Close(context.Background())
+	fmt.Println("\n\n", pdfLinks)
+
+	for _, link := range pdfLinks {
+		fmt.Println(link)
+	}
+	// temp
 
 	fmt.Println("Executed Successfully")
 }

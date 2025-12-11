@@ -1,3 +1,10 @@
+# 📄 Project Diagrams
+
+1. Document Ingestion
+![Document Ingestion](img/document_ingestion.png)
+2. RAG Structure 
+![RAG Structure](img/rag_structure.png)
+
 # 🚀 researchq – RAG Based Research Question Assistant
 
 This project uses **LangChain**, **FAISS**, **Streamlit**, and **UV** to process research PDFs and query them using RAG (Retrieval-Augmented Generation).
