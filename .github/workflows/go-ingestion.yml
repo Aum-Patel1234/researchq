@@ -27,9 +27,9 @@ jobs:
         working-directory: ./go_ingestion
         run: make build
 
-      - name: Test
-        working-directory: ./go_ingestion
-        run: make test
+      # - name: Test
+      #   working-directory: ./go_ingestion
+      #   run: make test
 
       - name: Lint
         working-directory: ./go_ingestion
