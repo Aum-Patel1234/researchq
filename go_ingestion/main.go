@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"go_ingestion/db"
 	researchpaperapis "go_ingestion/internal/research_paper_apis"
@@ -18,8 +17,8 @@ func main() {
 		return
 	}
 
-	conn := db.ConnectToDb()
-	defer conn.Close(context.Background())
+	dbPool := db.ConnectToDb()
+	defer dbPool.Close()
 
 	// arxiv
 	arxivEntries, err := researchpaperapis.GetArxivResponse("nlp")

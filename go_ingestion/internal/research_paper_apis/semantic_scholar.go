@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go_ingestion/db"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 )
 
 const semanticBaseURL = "https://api.semanticscholar.org/graph/v1/paper/search?query=%s&limit=%d&fields=paperId,title,abstract,year,authors,url,openAccessPdf,venue,publicationTypes,citationCount,referenceCount,fieldsOfStudy"
@@ -66,4 +68,51 @@ func GetSemanticPDFLink(paper SemanticPaper) string {
 		return *paper.OpenAccessPdf.URL
 	}
 	return ""
+}
+
+func getResearchPaperFromSemantic(p SemanticPaper) (db.ResearchPaper, error) {
+	if strings.TrimSpace(p.Title) == "" {
+		return db.ResearchPaper{}, errors.New("missing title in semantic paper")
+	}
+
+	pdfURL := GetSemanticPDFLink(p)
+	if strings.TrimSpace(pdfURL) == "" {
+		return db.ResearchPaper{}, fmt.Errorf("no PDF URL found for semantic paperId=%s", p.PaperID)
+	}
+
+	var sourceID *string
+	if id := strings.TrimSpace(p.PaperID); id != "" {
+		sourceID = &id
+	}
+
+	authorNames := make([]string, 0, len(p.Authors))
+	for _, a := range p.Authors {
+		name := strings.TrimSpace(a.URL)
+		if name == "" {
+			name = strings.TrimSpace(a.AuthorID)
+		}
+		authorNames = append(authorNames, name)
+	}
+
+	authorsJSON, err := json.Marshal(authorNames)
+	if err != nil {
+		return db.ResearchPaper{}, fmt.Errorf("failed to marshal semantic authors: %w", err)
+	}
+
+	metadataJSON, err := json.Marshal(p)
+	if err != nil {
+		return db.ResearchPaper{}, fmt.Errorf("failed to marshal semantic metadata: %w", err)
+	}
+
+	paper := db.ResearchPaper{
+		Source:   db.SemanticScholar,
+		SourceID: sourceID,
+		Title:    strings.TrimSpace(p.Title),
+		PDFURL:   pdfURL,
+		DOI:      nil,
+		Authors:  &authorsJSON,
+		Metadata: &metadataJSON,
+	}
+
+	return paper, nil
 }

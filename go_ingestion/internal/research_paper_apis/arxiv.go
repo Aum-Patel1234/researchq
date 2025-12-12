@@ -3,7 +3,9 @@ package researchpaperapis
 import (
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"go_ingestion/db"
 	"io"
 	"log"
 	"net/http"
@@ -62,4 +64,59 @@ func GetArxivResponse(query string) ([]ArxivEntry, error) {
 	}
 
 	return feed.Entries, nil
+}
+
+func getResearchPaperFromArxivEntry(entry *ArxivEntry) (db.ResearchPaper, error) {
+	if entry == nil {
+		return db.ResearchPaper{}, errors.New("nil entry")
+	}
+
+	title := strings.TrimSpace(entry.Title)
+	if title == "" {
+		return db.ResearchPaper{}, errors.New("missing title in entry")
+	}
+
+	pdfURL := GetPDFLink(*entry)
+	if pdfURL == "" {
+		return db.ResearchPaper{}, fmt.Errorf("no pdf/url found for entry id=%s title=%s", entry.ID, title)
+	}
+
+	var sourceID *string
+	if s := strings.TrimSpace(entry.ID); s != "" {
+		sourceID = &s
+	}
+
+	authors := make([]string, 0, len(entry.Author))
+	for _, author := range entry.Author {
+		name := strings.TrimSpace(author.Name)
+		authors = append(authors, name)
+	}
+
+	authorsJSON, err := json.Marshal(authors)
+	if err != nil {
+		return db.ResearchPaper{}, fmt.Errorf("failed to marshal authors: %w", err)
+	}
+
+	// Metadata: marshal the whole entry for raw payload (useful later)
+	metadataJSON, err := json.Marshal(entry)
+	if err != nil {
+		return db.ResearchPaper{}, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	var doiPtr *string
+	if d := strings.TrimSpace(entry.ArxivDOI); d != "" {
+		doiPtr = &d
+	}
+
+	paper := db.ResearchPaper{
+		Source:   db.Arxiv,
+		SourceID: sourceID,
+		Title:    title,
+		PDFURL:   pdfURL,
+		DOI:      doiPtr,
+		Authors:  &authorsJSON,
+		Metadata: &metadataJSON,
+	}
+
+	return paper, nil
 }
