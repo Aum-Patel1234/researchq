@@ -2,11 +2,13 @@ package researchpaperapis
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 const semanticBaseURL = "https://api.semanticscholar.org/graph/v1/paper/search?query=%s&limit=%d&fields=paperId,title,abstract,year,authors,url,openAccessPdf,venue,publicationTypes,citationCount,referenceCount,fieldsOfStudy"
@@ -17,7 +19,22 @@ func buildSemanticURL(query string, limit int) string {
 }
 
 func GetSemanticPapers(query string, limit int) ([]SemanticPaper, error) {
-	res, err := http.Get(buildSemanticURL(query, limit))
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", buildSemanticURL(query, limit), nil)
+	if err != nil {
+		log.Println("creating a new GET req failed")
+		return nil, err
+	}
+
+	semanticPaperApiKey := os.Getenv("SEMANTIC_PAPER_API_KEY")
+	if semanticPaperApiKey == "" {
+		log.Println("SemanticPaper api key missing")
+		return nil, errors.New("semanticPaperApiKey missing")
+	}
+	req.Header.Add("x-api-key", semanticPaperApiKey)
+
+	res, err := client.Do(req)
 	if err != nil {
 		log.Printf("GET request failed: %v\n", err)
 		return nil, err

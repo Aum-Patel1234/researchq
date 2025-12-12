@@ -43,7 +43,7 @@ func main() {
 	}
 	// arxiv
 
-	fmt.Println("\n------------\n")
+	fmt.Println("\n------------")
 	pdfLinks = pdfLinks[:0] // reset
 
 	// semantic
@@ -67,7 +67,7 @@ func main() {
 	}
 	// !semantic
 
-	fmt.Println("\n------------\n")
+	fmt.Println("\n------------")
 	pdfLinks = pdfLinks[:0] // reset
 
 	// springer
