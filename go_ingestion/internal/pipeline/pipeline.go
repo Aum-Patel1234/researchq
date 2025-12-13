@@ -104,7 +104,7 @@ func StartArxivProcess(ctx context.Context, dbPool *pgxpool.Pool, query string, 
 			}
 
 			log.Printf("[ARXIV] error at offset=%d attempt=%d/%d: %v", processedArxivPapers, attempt, maxRetries, err)
-			time.Sleep(time.Second * time.Duration(attempt))
+			time.Sleep(30 * time.Second)
 		}
 
 		if err != nil {
@@ -135,7 +135,7 @@ func StartSemanticProcess(ctx context.Context, dbPool *pgxpool.Pool, semanticSch
 			}
 
 			log.Printf("[SEMANTIC] error at offset=%d attempt=%d/%d: %v", processedSemanticPapers, attempt, maxRetries, err)
-			time.Sleep(time.Second * time.Duration(attempt))
+			time.Sleep(30 * time.Second)
 		}
 
 		if err != nil {
@@ -166,7 +166,7 @@ func StartSpringerProcess(ctx context.Context, dbPool *pgxpool.Pool, springerNat
 			}
 
 			log.Printf("[SPRINGER] error at offset=%d attempt=%d/%d: %v", processedSpringerNaturePapers, attempt, maxRetries, err)
-			time.Sleep(time.Second * time.Duration(attempt))
+			time.Sleep(30 * time.Second)
 		}
 
 		if err != nil {
