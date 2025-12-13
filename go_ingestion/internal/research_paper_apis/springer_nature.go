@@ -1,6 +1,7 @@
 package researchpaperapis
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,14 +11,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const springerBaseURL = "http://api.springernature.com/meta/v2/json"
 
-func buildSpringerURL(query, apiKey string, limit int) string {
+func buildSpringerURL(query, apiKey string, limit, offset uint64) string {
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("p", fmt.Sprintf("%d", limit))
+	params.Set("s", fmt.Sprintf("%d", offset))
 	params.Set("api_key", apiKey)
 
 	return springerBaseURL + "?" + params.Encode()
@@ -38,29 +42,56 @@ func GetSpringerPDF(record Record) string {
 	return ""
 }
 
-func GetSpringerResponse(query, apiKey string) ([]Record, error) {
-	fullURL := buildSpringerURL(query, apiKey, 5)
+func InsertSpringerPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, apiKey, query string, limit, offset uint64) error {
+	fullURL := buildSpringerURL(query, apiKey, limit, offset)
 
-	res, err := http.Get(fullURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create Springer request: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("Springer API request failed: %v\n", err)
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("Springer Nature returned non-200 status: %s", res.Status)
+	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Printf("Failed reading Springer response: %v\n", err)
-		return nil, err
+		return err
 	}
 
 	resp, err := parseSpringerResponse(body)
 	if err != nil {
 		log.Printf("JSON parsing failed: %v\n", err)
-		return nil, err
+		return err
 	}
 
-	return resp.Records, nil
+	for _, record := range resp.Records {
+		researchPaper, err := getResearchPaperFromSpringerNature(record)
+
+		if err != nil {
+			log.Printf("[SPRINGER] skipping entry id=%d: %v", researchPaper.ID, err)
+			continue
+		}
+
+		if strings.TrimSpace(researchPaper.PDFURL) == "" {
+			log.Printf("[SPRINGER] skipping paperId=%s: empty PDF URL", record.Identifier)
+			continue
+		}
+
+		if err := db.InsertIntoDb(ctx, dbPool, researchPaper); err != nil {
+			log.Printf("[DB] failed inserting arxiv paper id=%d title=%q: %v", researchPaper.ID, researchPaper.Title, err)
+			continue
+		}
+	}
+
+	return nil
 }
 
 func getResearchPaperFromSpringerNature(rec Record) (db.ResearchPaper, error) {

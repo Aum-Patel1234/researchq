@@ -1,6 +1,7 @@
 package researchpaperapis
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -11,29 +12,32 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const baseURL = "https://export.arxiv.org/api/query?search_query=all:%s&start=%d&max_results=%d"
 
-func buildArxivURL(query string, start int, maxResults int) string {
+func buildArxivURL(query string, start uint64, maxResults uint64) string {
 	q := url.QueryEscape(query) // e.g. "machine learning" → "machine+learning"
 	return fmt.Sprintf(baseURL, q, start, maxResults)
 }
 
-func filerResponse(jsonData string) (ArxivEntry, error) {
-	var entry ArxivEntry
+// func filerResponse(jsonData string) (ArxivEntry, error) {
+// 	var entry ArxivEntry
+//
+// 	err := json.Unmarshal([]byte(jsonData), &entry)
+// 	if err != nil {
+// 		return entry, err
+// 	}
+//
+// 	return entry, nil
+// }
+//
+// func filterPdfLink(paperLink string) string {
+// 	return strings.Replace(paperLink, "/abs/", "/pdf/", 1)
+// }
 
-	err := json.Unmarshal([]byte(jsonData), &entry)
-	if err != nil {
-		return entry, err
-	}
-
-	return entry, nil
-}
-
-func filterPdfLink(paperLink string) string {
-	return strings.Replace(paperLink, "/abs/", "/pdf/", 1)
-}
 func GetPDFLink(entry ArxivEntry) string {
 	for _, l := range entry.Link {
 		if l.Type == "application/pdf" || l.Title == "pdf" {
@@ -43,27 +47,53 @@ func GetPDFLink(entry ArxivEntry) string {
 	return ""
 }
 
-func GetArxivResponse(query string) ([]ArxivEntry, error) {
-	res, err := http.Get(buildArxivURL(query, 0, 5))
+func InsertArxivEntryToDB(ctx context.Context, dbPool *pgxpool.Pool, query string, start uint64, maxResults uint64) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildArxivURL(query, start, maxResults), nil)
 	if err != nil {
-		log.Printf("GET request failed: %v\n", err)
-		return nil, err
+		return fmt.Errorf("failed to create arxiv request: %w", err)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("arxiv GET request failed: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("arxiv returned non-200 status: %s", res.Status)
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Printf("Failed to read response body: %v\n", err)
-		return nil, err
+		return err
 	}
 
 	var feed Feed
 	if err := xml.Unmarshal(body, &feed); err != nil {
 		log.Printf("Failed to parse XML: %v\n", err)
-		return nil, err
+		return err
 	}
 
-	return feed.Entries, nil
+	for _, entry := range feed.Entries {
+		researchPaper, err := getResearchPaperFromArxivEntry(&entry)
+		if err != nil {
+			log.Printf("[ARXIV] skipping entry id=%s: %v", entry.ID, err)
+			continue
+		}
+
+		if strings.TrimSpace(researchPaper.PDFURL) == "" {
+			log.Printf("[ARXIV] skipping paperId=%s: empty PDF URL", entry.ID)
+			continue
+		}
+
+		if err := db.InsertIntoDb(ctx, dbPool, researchPaper); err != nil {
+			log.Printf("[DB] failed inserting arxiv paper id=%s title=%q: %v", entry.ID, researchPaper.Title, err)
+			continue
+		}
+	}
+
+	return nil
 }
 
 func getResearchPaperFromArxivEntry(entry *ArxivEntry) (db.ResearchPaper, error) {
