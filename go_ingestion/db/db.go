@@ -82,6 +82,6 @@ func InsertIntoDb(ctx context.Context, dbPool *pgxpool.Pool, paper ResearchPaper
 		return fmt.Errorf("failed to insert paper: %w", err)
 	}
 
-	fmt.Printf("Inserted paper with ID %d at %s\n", paper.ID, paper.CreatedAt)
+	// fmt.Printf("Inserted paper with ID %d at %s\n", paper.ID, paper.CreatedAt)
 	return err
 }
