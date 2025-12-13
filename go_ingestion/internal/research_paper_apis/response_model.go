@@ -6,8 +6,11 @@ import (
 
 // Feed is the top-level XML response
 type Feed struct {
-	XMLName xml.Name     `xml:"feed"`
-	Entries []ArxivEntry `xml:"entry"`
+	XMLName      xml.Name     `xml:"feed"`
+	TotalResults uint64       `xml:"totalResults"`
+	StartIndex   string       `xml:"startIndex"`
+	ItemsPerPage string       `xml:"itemsPerPage"`
+	Entries      []ArxivEntry `xml:"entry"`
 }
 
 type ArxivEntry struct {
@@ -50,7 +53,7 @@ type ArxivAuthor struct {
 // Semantic Scholar API
 
 type SemanticSearchResponse struct {
-	Total int             `json:"total"`
+	Total uint64          `json:"total"`
 	Data  []SemanticPaper `json:"data"`
 }
 

@@ -42,33 +42,39 @@ func GetSpringerPDF(record Record) string {
 	return ""
 }
 
-func InsertSpringerPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, apiKey, query string, limit, offset uint64) error {
+func MakeSpringerNatureAPICALL(ctx context.Context, apiKey, query string, limit, offset uint64) (SpringerResponse, error) {
 	fullURL := buildSpringerURL(query, apiKey, limit, offset)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create Springer request: %w", err)
+		return SpringerResponse{}, fmt.Errorf("failed to create Springer request: %w", err)
 	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("Springer API request failed: %v\n", err)
-		return err
+		return SpringerResponse{}, err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Springer Nature returned non-200 status: %s", res.Status)
+		return SpringerResponse{}, fmt.Errorf("Springer Nature returned non-200 status: %s", res.Status)
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("Failed reading Springer response: %v\n", err)
-		return err
+		return SpringerResponse{}, err
 	}
 
 	resp, err := parseSpringerResponse(body)
 	if err != nil {
-		log.Printf("JSON parsing failed: %v\n", err)
+		return SpringerResponse{}, err
+	}
+
+	return resp, nil
+}
+
+func InsertSpringerPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, apiKey, query string, limit, offset uint64) error {
+	resp, err := MakeSpringerNatureAPICALL(ctx, apiKey, query, limit, offset)
+	if err != nil {
 		return err
 	}
 

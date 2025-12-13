@@ -47,31 +47,40 @@ func GetPDFLink(entry ArxivEntry) string {
 	return ""
 }
 
-func InsertArxivEntryToDB(ctx context.Context, dbPool *pgxpool.Pool, query string, start uint64, maxResults uint64) error {
+func MakeArivAPICALL(ctx context.Context, query string, start, maxResults uint64) (Feed, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildArxivURL(query, start, maxResults), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create arxiv request: %w", err)
+		return Feed{}, fmt.Errorf("failed to create arxiv request: %w", err)
 	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("arxiv GET request failed: %w", err)
+		return Feed{}, fmt.Errorf("arxiv GET request failed: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("arxiv returned non-200 status: %s", res.Status)
+		return Feed{}, fmt.Errorf("arxiv returned non-200 status: %s", res.Status)
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Printf("Failed to read response body: %v\n", err)
-		return err
+		return Feed{}, err
 	}
 
 	var feed Feed
 	if err := xml.Unmarshal(body, &feed); err != nil {
 		log.Printf("Failed to parse XML: %v\n", err)
+		return Feed{}, err
+	}
+
+	return feed, nil
+}
+
+func InsertArxivEntryToDB(ctx context.Context, dbPool *pgxpool.Pool, query string, start, maxResults uint64) error {
+	feed, err := MakeArivAPICALL(ctx, query, start, maxResults)
+	if err != nil {
 		return err
 	}
 

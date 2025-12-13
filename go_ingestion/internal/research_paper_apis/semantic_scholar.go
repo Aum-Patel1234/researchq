@@ -22,42 +22,42 @@ func buildSemanticURL(query string, limit uint64, offset uint64) string {
 	return fmt.Sprintf(semanticBaseURL, q, limit, offset)
 }
 
-func InsertSemanticPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, semanticPaperApiKey, query string, limit uint64, offset uint64) error {
+func MakeSemanticScholarAPICALL(ctx context.Context, semanticPaperApiKey, query string, limit, offset uint64) (SemanticSearchResponse, error) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", buildSemanticURL(query, limit, offset), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildSemanticURL(query, limit, offset), nil)
 	if err != nil {
-		log.Println("creating a new GET req failed")
-		return err
+		return SemanticSearchResponse{}, err
 	}
 
-	// semanticPaperApiKey := os.Getenv("SEMANTIC_PAPER_API_KEY")
-	// if semanticPaperApiKey == "" {
-	// 	log.Println("SemanticPaper api key missing")
-	// 	return errors.New("semanticPaperApiKey missing")
-	// }
 	req.Header.Add("x-api-key", semanticPaperApiKey)
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.Printf("GET request failed: %v\n", err)
-		return err
+		return SemanticSearchResponse{}, err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("semantic scholar returned non-200 status: %s", res.Status)
+		return SemanticSearchResponse{}, fmt.Errorf("semantic scholar returned non-200 status: %s", res.Status)
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Printf("Failed to read response body: %v\n", err)
-		return err
+		return SemanticSearchResponse{}, fmt.Errorf("semantic scholar returned status %s", res.Status)
 	}
 
 	var resp SemanticSearchResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Printf("Failed to parse JSON: %v\n", err)
+		return SemanticSearchResponse{}, err
+	}
+
+	return resp, nil
+}
+
+func InsertSemanticPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, semanticPaperApiKey, query string, limit uint64, offset uint64) error {
+	resp, err := MakeSemanticScholarAPICALL(ctx, semanticPaperApiKey, query, limit, offset)
+	if err != nil {
 		return err
 	}
 
