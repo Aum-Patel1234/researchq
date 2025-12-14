@@ -35,7 +35,9 @@ func main() {
 		log.Fatal("Required API keys are missing. Exiting...")
 	}
 
-	const limit = 100
+	const arXivlimit = 1000
+	const semanticScholarLimit = 100
+	const springerNatureLimit = 25
 
 	// Fetch totals with a short-lived context
 	totalsCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -58,21 +60,21 @@ func main() {
 	go func() {
 		defer wg.Done()
 		log.Println("[ARXIV] worker started")
-		pipeline.StartArxivProcess(ctx, dbPool, query, 0, totalArxivPapers, limit)
+		pipeline.StartArxivProcess(ctx, dbPool, query, 0, totalArxivPapers, arXivlimit)
 		log.Println("[ARXIV] worker finished")
 	}()
 
 	go func() {
 		defer wg.Done()
 		log.Println("[SEMANTIC] worker started")
-		pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, 0, totalSemanticScholarPapers, limit)
+		pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, 0, totalSemanticScholarPapers, semanticScholarLimit)
 		log.Println("[SEMANTIC] worker finished")
 	}()
 
 	go func() {
 		defer wg.Done()
 		log.Println("[SPRINGER] worker started")
-		pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, 0, totalSpringerNaturePapers, limit)
+		pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, 0, totalSpringerNaturePapers, springerNatureLimit)
 		log.Println("[SPRINGER] worker finished")
 	}()
 
