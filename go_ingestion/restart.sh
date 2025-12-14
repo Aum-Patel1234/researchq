@@ -5,6 +5,9 @@ echo "📦 Pulling latest code..."
 cd ~/researchq/go_ingestion
 git pull
 
+echo "🛑 Stopping service..."
+sudo systemctl stop paper-ingestion
+
 echo "🔨 Building binary..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o paper_ingestion ./
 

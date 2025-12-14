@@ -70,6 +70,7 @@ sudo journalctl -u paper-ingestion -f
 
 # restart
 
-chmod +x restart_ingestion.sh
-./restart_ingestion.sh
+cd ~/researchq/go_ingestion/
+sudo chmod +x restart.sh
+./restart.sh
 sudo journalctl -u paper-ingestion -f --no-pager
