@@ -44,14 +44,14 @@ func main() {
 	defer cancel()
 
 	totalArxivPapers, totalSemanticScholarPapers, totalSpringerNaturePapers := pipeline.GetTotalPapers(totalsCtx, query, semanticScholarApiKey, springerNatureApiKey, 1, 0)
-
+	processedArxivPapers, processedSemanticPapers, processedSpringerNaturePapers := db.GetCurrentlyProcessedDocuments(totalsCtx, dbPool)
 	time.Sleep(5 * time.Second)
 
 	log.Printf(
-		"[TOTALS] arXiv=%d semantic=%d springer=%d",
-		totalArxivPapers,
-		totalSemanticScholarPapers,
-		totalSpringerNaturePapers,
+		"[TOTALS] arXiv=%d (processed=%d) semantic=%d (processed=%d) springer=%d (processed=%d)",
+		totalArxivPapers, processedArxivPapers,
+		totalSemanticScholarPapers, processedSemanticPapers,
+		totalSpringerNaturePapers, processedSpringerNaturePapers,
 	)
 
 	var wg sync.WaitGroup
@@ -60,21 +60,21 @@ func main() {
 	go func() {
 		defer wg.Done()
 		log.Println("[ARXIV] worker started")
-		pipeline.StartArxivProcess(ctx, dbPool, query, 0, totalArxivPapers, arXivlimit)
+		pipeline.StartArxivProcess(ctx, dbPool, query, processedArxivPapers, totalArxivPapers, arXivlimit)
 		log.Println("[ARXIV] worker finished")
 	}()
 
 	go func() {
 		defer wg.Done()
 		log.Println("[SEMANTIC] worker started")
-		pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, 0, totalSemanticScholarPapers, semanticScholarLimit)
+		pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, processedSemanticPapers, totalSemanticScholarPapers, semanticScholarLimit)
 		log.Println("[SEMANTIC] worker finished")
 	}()
 
 	go func() {
 		defer wg.Done()
 		log.Println("[SPRINGER] worker started")
-		pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, 0, totalSpringerNaturePapers, springerNatureLimit)
+		pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, processedSpringerNaturePapers, totalSpringerNaturePapers, springerNatureLimit)
 		log.Println("[SPRINGER] worker finished")
 	}()
 

@@ -87,3 +87,24 @@ func InsertIntoDb(ctx context.Context, dbPool *pgxpool.Pool, paper ResearchPaper
 	// fmt.Printf("Inserted paper with ID %d at %s\n", paper.ID, paper.CreatedAt)
 	return err
 }
+
+func GetCurrentlyProcessedDocuments(ctx context.Context, dbPool *pgxpool.Pool) (uint64, uint64, uint64) {
+	var arxivCount, semanticCount, springerCount uint64
+
+	query := `
+		SELECT 
+			COUNT(*) FILTER (WHERE source = $1) AS arxiv_count,
+			COUNT(*) FILTER (WHERE source = $2) AS semantic_count,
+			COUNT(*) FILTER (WHERE source = $3) AS springer_count
+		FROM research_papers;
+	`
+
+	err := dbPool.QueryRow(ctx, query, string(Arxiv), string(SemanticScholar), string(SpringerNature)).Scan(&arxivCount, &semanticCount, &springerCount)
+
+	if err != nil {
+		// NOTE: I can return 0,0,0 but its just computaion waste
+		log.Fatal("Do not proceed")
+	}
+
+	return arxivCount, semanticCount, springerCount
+}
