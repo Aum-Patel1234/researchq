@@ -43,6 +43,8 @@ func main() {
 
 	totalArxivPapers, totalSemanticScholarPapers, totalSpringerNaturePapers := pipeline.GetTotalPapers(totalsCtx, query, semanticScholarApiKey, springerNatureApiKey, 1, 0)
 
+	time.Sleep(5 * time.Second)
+
 	log.Printf(
 		"[TOTALS] arXiv=%d semantic=%d springer=%d",
 		totalArxivPapers,

@@ -26,27 +26,29 @@ func ConnectToDb() *pgxpool.Pool {
 	return dbPool
 }
 
-// -- Minimal enum for source
-// CREATE TYPE IF NOT EXISTS paper_source AS ENUM ('arxiv','semanticscholar','springernature');
+// CREATE TYPE paper_source AS ENUM (
+//     'arxiv',
+//     'semanticscholar',
+//     'springernature'
+// );
 //
-// -- Very minimal research_papers table
-// CREATE TABLE IF NOT EXISTS research_papers (
-//     id BIGSERIAL PRIMARY KEY,        -- auto-increment ID
-//     source paper_source NOT NULL,    -- source of the record
-//     source_id TEXT,                  -- original source ID (e.g. "2104.12405v2")
-//     title TEXT NOT NULL,             -- required
-//     pdf_url TEXT NOT NULL,           -- required for retrieval
-//     authors JSONB,                   -- optional
-//     doi TEXT,                        -- optional
-//     metadata JSONB,                  -- optional raw payload
+// CREATE TABLE research_papers (
+//     id BIGSERIAL PRIMARY KEY,
+//
+//     source paper_source NOT NULL,
+//     source_id TEXT UNIQUE,
+//     title TEXT UNIQUE NOT NULL,
+//     pdf_url TEXT UNIQUE NOT NULL,
+//
+//     authors JSONB,
+//     doi TEXT,
+//     metadata JSONB,
+//     embedding_processed BOOLEAN DEFAULT false,
 //     created_at TIMESTAMPTZ DEFAULT now()
 // );
 //
-// -- Optional: minimal indexes (only if you plan to filter by source or DOI)
-// CREATE INDEX IF NOT EXISTS idx_research_papers_source ON research_papers(source);
-//
-// ALTER TABLE research_papers
-// ADD COLUMN IF NOT EXISTS embedding_processed BOOLEAN DEFAULT false;
+// CREATE INDEX idx_research_papers_source
+//     ON research_papers(source);
 
 type ResearchPaper struct {
 	ID       uint64      `db:"id"`
