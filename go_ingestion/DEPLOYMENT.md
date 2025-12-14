@@ -67,3 +67,9 @@ sudo systemctl enable paper-ingestion
 # log status
 sudo systemctl status paper-ingestion --no-pager
 sudo journalctl -u paper-ingestion -f
+
+# restart
+
+chmod +x restart_ingestion.sh
+./restart_ingestion.sh
+sudo journalctl -u paper-ingestion -f --no-pager
