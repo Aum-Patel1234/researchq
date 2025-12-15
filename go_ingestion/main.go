@@ -35,7 +35,7 @@ func main() {
 		log.Fatal("Required API keys are missing. Exiting...")
 	}
 
-	const arXivlimit = 50
+	const arXivlimit = 25
 	const semanticScholarLimit = 25
 	const springerNatureLimit = 25
 
@@ -55,7 +55,7 @@ func main() {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
@@ -64,12 +64,13 @@ func main() {
 		log.Println("[ARXIV] worker finished")
 	}()
 
-	go func() {
-		defer wg.Done()
-		log.Println("[SEMANTIC] worker started")
-		pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, processedSemanticPapers, totalSemanticScholarPapers, semanticScholarLimit)
-		log.Println("[SEMANTIC] worker finished")
-	}()
+	// NOTE: Its limit is reached
+	// go func() {
+	// 	defer wg.Done()
+	// 	log.Println("[SEMANTIC] worker started")
+	// 	pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, processedSemanticPapers, totalSemanticScholarPapers, semanticScholarLimit)
+	// 	log.Println("[SEMANTIC] worker finished")
+	// }()
 
 	go func() {
 		defer wg.Done()
