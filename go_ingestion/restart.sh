@@ -2,7 +2,7 @@
 set -e
 
 echo "📦 Pulling latest code..."
-cd ~/researchq/go_ingestion
+cd ~/researchq
 git pull
 
 echo "🛑 Stopping service..."
@@ -21,3 +21,4 @@ sudo systemctl restart paper-ingestion
 
 echo "📡 Service status:"
 sudo systemctl status paper-ingestion --no-pager
+
