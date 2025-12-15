@@ -2,7 +2,7 @@
 set -e
 
 echo "📦 Pulling latest code..."
-cd ~/researchq
+cd /home/ec2-user/researchq
 git pull
 
 echo "🛑 Stopping service..."
