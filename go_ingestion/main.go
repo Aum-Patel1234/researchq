@@ -55,14 +55,15 @@ func main() {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
-		log.Println("[ARXIV] worker started")
-		pipeline.StartArxivProcess(ctx, dbPool, query, processedArxivPapers, totalArxivPapers, arXivlimit)
-		log.Println("[ARXIV] worker finished")
-	}()
+	// NOTE: API limit reached
+	// go func() {
+	// 	defer wg.Done()
+	// 	log.Println("[ARXIV] worker started")
+	// 	pipeline.StartArxivProcess(ctx, dbPool, query, processedArxivPapers, totalArxivPapers, arXivlimit)
+	// 	log.Println("[ARXIV] worker finished")
+	// }()
 
 	// NOTE: Its limit is reached
 	// go func() {
