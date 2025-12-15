@@ -12,6 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const maxRetries = 3
+const initialTimeSkip uint16 = 45
+
 func GetTotalPapers(ctx context.Context, query, semanticScholarApiKey, springerNatureApiKey string, limit, offset uint64) (uint64, uint64, uint64) {
 	var (
 		totalArxivPapers           uint64
@@ -84,9 +87,11 @@ func GetTotalPapers(ctx context.Context, query, semanticScholarApiKey, springerN
 	return totalArxivPapers, totalSemanticScholarPapers, totalSpringerNaturePapers
 }
 
-func StartArxivProcess(ctx context.Context, dbPool *pgxpool.Pool, query string, processedArxivPapers, totalArxivPapers, limit uint64) {
-	const maxRetries = 10
+func exponentialBackoff(currAttempt uint16, initialTimeSkip uint16) uint16 {
+	return initialTimeSkip * (1 << (currAttempt - 1))
+}
 
+func StartArxivProcess(ctx context.Context, dbPool *pgxpool.Pool, query string, processedArxivPapers, totalArxivPapers, limit uint64) {
 	for processedArxivPapers < totalArxivPapers {
 		select {
 		case <-ctx.Done():
@@ -99,7 +104,8 @@ func StartArxivProcess(ctx context.Context, dbPool *pgxpool.Pool, query string, 
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			err = researchpaperapis.InsertArxivEntryToDB(ctx, dbPool, query, processedArxivPapers, limit)
 
-			time.Sleep(30 * time.Second)
+			timeToSleep := exponentialBackoff(uint16(attempt), initialTimeSkip)
+			time.Sleep(time.Duration(timeToSleep) * time.Second)
 			if err == nil {
 				break
 			}
@@ -116,8 +122,6 @@ func StartArxivProcess(ctx context.Context, dbPool *pgxpool.Pool, query string, 
 }
 
 func StartSemanticProcess(ctx context.Context, dbPool *pgxpool.Pool, semanticScholarApiKey, query string, processedSemanticPapers, totalSemanticScholarPapers, limit uint64) {
-	const maxRetries = 10
-
 	for processedSemanticPapers < totalSemanticScholarPapers {
 		select {
 		case <-ctx.Done():
@@ -130,13 +134,13 @@ func StartSemanticProcess(ctx context.Context, dbPool *pgxpool.Pool, semanticSch
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			err = researchpaperapis.InsertSemanticPaperIntoDB(ctx, dbPool, semanticScholarApiKey, query, limit, processedSemanticPapers)
 
-			time.Sleep(30 * time.Second)
+			timeToSleep := exponentialBackoff(uint16(attempt), initialTimeSkip)
+			time.Sleep(time.Duration(timeToSleep) * time.Second)
 			if err == nil {
 				break
 			}
 
 			log.Printf("[SEMANTIC] error at offset=%d attempt=%d/%d: %v", processedSemanticPapers, attempt, maxRetries, err)
-			time.Sleep(30 * time.Second)
 		}
 
 		if err != nil {
@@ -148,8 +152,6 @@ func StartSemanticProcess(ctx context.Context, dbPool *pgxpool.Pool, semanticSch
 }
 
 func StartSpringerProcess(ctx context.Context, dbPool *pgxpool.Pool, springerNatureApiKey, query string, processedSpringerNaturePapers, totalSpringerNaturePapers, limit uint64) {
-	const maxRetries = 10
-
 	for processedSpringerNaturePapers < totalSpringerNaturePapers {
 		select {
 		case <-ctx.Done():
@@ -162,7 +164,7 @@ func StartSpringerProcess(ctx context.Context, dbPool *pgxpool.Pool, springerNat
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			err = researchpaperapis.InsertSpringerPaperIntoDB(ctx, dbPool, springerNatureApiKey, query, limit, processedSpringerNaturePapers)
 
-			time.Sleep(30 * time.Second)
+			time.Sleep(time.Duration(initialTimeSkip) * time.Second)
 			if err == nil {
 				break
 			}

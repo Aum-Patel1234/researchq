@@ -35,7 +35,7 @@ func main() {
 		log.Fatal("Required API keys are missing. Exiting...")
 	}
 
-	const arXivlimit = 25
+	const arXivlimit = 50
 	const semanticScholarLimit = 25
 	const springerNatureLimit = 25
 
