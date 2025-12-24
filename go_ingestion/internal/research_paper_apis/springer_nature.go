@@ -79,7 +79,7 @@ func InsertSpringerPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, apiKey
 	}
 
 	for _, record := range resp.Records {
-		researchPaper, err := getResearchPaperFromSpringerNature(record)
+		researchPaper, err := getResearchPaperFromSpringerNature(record, query)
 
 		if err != nil {
 			log.Printf("[SPRINGER] skipping entry id=%d: %v", researchPaper.ID, err)
@@ -100,7 +100,7 @@ func InsertSpringerPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, apiKey
 	return nil
 }
 
-func getResearchPaperFromSpringerNature(rec Record) (db.ResearchPaper, error) {
+func getResearchPaperFromSpringerNature(rec Record, query string) (db.ResearchPaper, error) {
 	title := strings.TrimSpace(rec.Title)
 	if title == "" {
 		return db.ResearchPaper{}, errors.New("missing title in springer record")
@@ -147,6 +147,7 @@ func getResearchPaperFromSpringerNature(rec Record) (db.ResearchPaper, error) {
 		DOI:      doiPtr,
 		Authors:  &authorsJSON,
 		Metadata: &metadataJSON,
+		Topic:    query,
 	}
 
 	return paper, nil

@@ -62,7 +62,7 @@ func InsertSemanticPaperIntoDB(ctx context.Context, dbPool *pgxpool.Pool, semant
 	}
 
 	for _, semanticPaper := range resp.Data {
-		researchPaper, err := getResearchPaperFromSemantic(semanticPaper)
+		researchPaper, err := getResearchPaperFromSemantic(semanticPaper, query)
 
 		if err != nil {
 			log.Printf("[SEMANTIC] skipping entry id=%d: %v", researchPaper.ID, err)
@@ -91,7 +91,7 @@ func GetSemanticPDFLink(paper SemanticPaper) string {
 	return ""
 }
 
-func getResearchPaperFromSemantic(p SemanticPaper) (db.ResearchPaper, error) {
+func getResearchPaperFromSemantic(p SemanticPaper, query string) (db.ResearchPaper, error) {
 	if strings.TrimSpace(p.Title) == "" {
 		return db.ResearchPaper{}, errors.New("missing title in semantic paper")
 	}
@@ -133,6 +133,7 @@ func getResearchPaperFromSemantic(p SemanticPaper) (db.ResearchPaper, error) {
 		DOI:      nil,
 		Authors:  &authorsJSON,
 		Metadata: &metadataJSON,
+		Topic:    query,
 	}
 
 	return paper, nil

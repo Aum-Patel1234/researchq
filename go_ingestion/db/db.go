@@ -49,6 +49,19 @@ func ConnectToDb() *pgxpool.Pool {
 //
 // CREATE INDEX idx_research_papers_source
 //     ON research_papers(source);
+//
+// ALTER TABLE research_papers
+// ADD COLUMN topic TEXT;
+//
+// UPDATE research_papers
+// SET topic = 'natural language processing';
+//
+// ALTER TABLE research_papers
+// ALTER COLUMN topic SET NOT NULL;
+//
+//
+// CREATE INDEX idx_research_papers_topic
+//     ON research_papers(topic);
 
 type ResearchPaper struct {
 	ID       uint64      `db:"id"`
@@ -60,6 +73,7 @@ type ResearchPaper struct {
 	DOI      *string     `db:"doi"`
 	Metadata *[]byte     `db:"metadata"` // store JSONB as []byte
 	// EmbeddingProcessed bool        `db:"embedding_processed"`
+	Topic     string    `db:"topic"`
 	CreatedAt time.Time `db:"created_at"`
 }
 
@@ -73,12 +87,12 @@ const (
 
 func InsertIntoDb(ctx context.Context, dbPool *pgxpool.Pool, paper ResearchPaper) error {
 	query := `
-		INSERT INTO research_papers (source, source_id, title, pdf_url, authors, doi, metadata)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO research_papers (source, source_id, title, pdf_url, authors, doi, metadata, topic)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at;
 	`
 
-	err := dbPool.QueryRow(ctx, query, paper.Source, paper.SourceID, paper.Title, paper.PDFURL, paper.Authors, paper.DOI, paper.Metadata).Scan(&paper.ID, &paper.CreatedAt)
+	err := dbPool.QueryRow(ctx, query, paper.Source, paper.SourceID, paper.Title, paper.PDFURL, paper.Authors, paper.DOI, paper.Metadata, paper.Topic).Scan(&paper.ID, &paper.CreatedAt)
 
 	if err != nil {
 		return fmt.Errorf("failed to insert paper: %w", err)
@@ -103,7 +117,7 @@ func GetCurrentlyProcessedDocuments(ctx context.Context, dbPool *pgxpool.Pool) (
 
 	if err != nil {
 		// NOTE: I can return 0,0,0 but its just computaion waste
-		log.Fatal("Do not proceed")
+		log.Fatal("Do not proceed - ", err)
 	}
 
 	return arxivCount, semanticCount, springerCount

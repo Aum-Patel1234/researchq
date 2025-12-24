@@ -6,9 +6,6 @@ import (
 	"go_ingestion/internal/pipeline"
 	"log"
 	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -24,8 +21,8 @@ func main() {
 	dbPool := db.ConnectToDb()
 	defer dbPool.Close()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	// ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// defer stop()
 
 	const query = "natural language preprocessing"
 
@@ -54,33 +51,33 @@ func main() {
 		totalSpringerNaturePapers, processedSpringerNaturePapers,
 	)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// NOTE: API limit reached
+	// var wg sync.WaitGroup
+	// wg.Add(3)
+	//
+	// // NOTE: API limit reached
 	// go func() {
 	// 	defer wg.Done()
 	// 	log.Println("[ARXIV] worker started")
 	// 	pipeline.StartArxivProcess(ctx, dbPool, query, processedArxivPapers, totalArxivPapers, arXivlimit)
 	// 	log.Println("[ARXIV] worker finished")
 	// }()
-
-	// NOTE: Its limit is reached
+	//
+	// // NOTE: Its limit is reached
 	// go func() {
 	// 	defer wg.Done()
 	// 	log.Println("[SEMANTIC] worker started")
 	// 	pipeline.StartSemanticProcess(ctx, dbPool, semanticScholarApiKey, query, processedSemanticPapers, totalSemanticScholarPapers, semanticScholarLimit)
 	// 	log.Println("[SEMANTIC] worker finished")
 	// }()
-
-	go func() {
-		defer wg.Done()
-		log.Println("[SPRINGER] worker started")
-		pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, processedSpringerNaturePapers, totalSpringerNaturePapers, springerNatureLimit)
-		log.Println("[SPRINGER] worker finished")
-	}()
-
-	wg.Wait()
+	//
+	// go func() {
+	// 	defer wg.Done()
+	// 	log.Println("[SPRINGER] worker started")
+	// 	pipeline.StartSpringerProcess(ctx, dbPool, springerNatureApiKey, query, processedSpringerNaturePapers, totalSpringerNaturePapers, springerNatureLimit)
+	// 	log.Println("[SPRINGER] worker finished")
+	// }()
+	//
+	// wg.Wait()
 
 	log.Println("All ingestion pipelines completed")
 }

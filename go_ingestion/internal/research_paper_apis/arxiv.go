@@ -85,7 +85,7 @@ func InsertArxivEntryToDB(ctx context.Context, dbPool *pgxpool.Pool, query strin
 	}
 
 	for _, entry := range feed.Entries {
-		researchPaper, err := getResearchPaperFromArxivEntry(&entry)
+		researchPaper, err := getResearchPaperFromArxivEntry(&entry, query)
 		if err != nil {
 			log.Printf("[ARXIV] skipping entry id=%s: %v", entry.ID, err)
 			continue
@@ -105,7 +105,7 @@ func InsertArxivEntryToDB(ctx context.Context, dbPool *pgxpool.Pool, query strin
 	return nil
 }
 
-func getResearchPaperFromArxivEntry(entry *ArxivEntry) (db.ResearchPaper, error) {
+func getResearchPaperFromArxivEntry(entry *ArxivEntry, query string) (db.ResearchPaper, error) {
 	if entry == nil {
 		return db.ResearchPaper{}, errors.New("nil entry")
 	}
@@ -155,6 +155,7 @@ func getResearchPaperFromArxivEntry(entry *ArxivEntry) (db.ResearchPaper, error)
 		DOI:      doiPtr,
 		Authors:  &authorsJSON,
 		Metadata: &metadataJSON,
+		Topic:    query,
 	}
 
 	return paper, nil
