@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,22 +61,21 @@ func ConnectToDb() *pgxpool.Pool {
 // ALTER TABLE research_papers
 // ALTER COLUMN topic SET NOT NULL;
 //
-//
 // CREATE INDEX idx_research_papers_topic
 //     ON research_papers(topic);
 
 type ResearchPaper struct {
-	ID       uint64      `db:"id"`
-	Source   PaperSource `db:"source"`
-	SourceID *string     `db:"source_id"`
-	Title    string      `db:"title"`
-	PDFURL   string      `db:"pdf_url"`
-	Authors  *[]byte     `db:"authors"` // store JSONB as []byte
-	DOI      *string     `db:"doi"`
-	Metadata *[]byte     `db:"metadata"` // store JSONB as []byte
-	// EmbeddingProcessed bool        `db:"embedding_processed"`
-	Topic     string    `db:"topic"`
-	CreatedAt time.Time `db:"created_at"`
+	ID                 uint64      `db:"id"`
+	Source             PaperSource `db:"source"`
+	SourceID           *string     `db:"source_id"`
+	Title              string      `db:"title"`
+	PDFURL             string      `db:"pdf_url"`
+	Authors            *[]byte     `db:"authors"` // store JSONB as []byte
+	DOI                *string     `db:"doi"`
+	Metadata           *[]byte     `db:"metadata"` // store JSONB as []byte
+	EmbeddingProcessed bool        `db:"embedding_processed"`
+	Topic              string      `db:"topic"`
+	CreatedAt          time.Time   `db:"created_at"`
 }
 
 type PaperSource string
@@ -121,4 +122,108 @@ func GetCurrentlyProcessedDocuments(ctx context.Context, dbPool *pgxpool.Pool) (
 	}
 
 	return arxivCount, semanticCount, springerCount
+}
+
+// NOTE: sql to csv
+func GetFullData(ctx context.Context, dbPool *pgxpool.Pool) {
+	// NOTE: order is imp
+	query := `
+		SELECT
+			id,
+			source,
+			source_id,
+			title,
+			pdf_url,
+			authors,
+			doi,
+			metadata,
+			embedding_processed,
+			topic,
+			created_at
+		FROM research_papers;
+		`
+
+	rows, err := dbPool.Query(ctx, query)
+
+	if err != nil {
+		log.Fatal("Do not proceed - ", err)
+	}
+	defer rows.Close()
+
+	if err := os.MkdirAll("data", 0755); err != nil {
+		// IMPORTANT: 0755 = file permissions
+		// ls -la = rwxr-xr-x
+		// 7 → owner: read + write + execute
+		// 5 → group: read + execute
+		// 5 → others: read + execute
+		log.Fatal("Failed to create data directory:", err)
+	}
+
+	file, err := os.Create("data/data.csv")
+	if err != nil {
+		log.Fatal("Failed to create CSV file:", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	writer.Write([]string{
+		"id", "source", "source_id", "title", "pdf_url",
+		"authors", "doi", "metadata",
+		"embedding_processed", "topic", "created_at",
+	})
+
+	for rows.Next() {
+		var paper ResearchPaper
+
+		err := rows.Scan(
+			&paper.ID,
+			&paper.Source,
+			&paper.SourceID,
+			&paper.Title,
+			&paper.PDFURL,
+			&paper.Authors,
+			&paper.DOI,
+			&paper.Metadata,
+			&paper.EmbeddingProcessed,
+			&paper.Topic,
+			&paper.CreatedAt,
+		)
+		if err != nil {
+			log.Fatal("Row scan failed:", err)
+		}
+
+		writer.Write([]string{
+			strconv.FormatUint(paper.ID, 10),
+			string(paper.Source),
+			nullableString(paper.SourceID),
+			paper.Title,
+			paper.PDFURL,
+			byteSliceToString(paper.Authors),
+			nullableString(paper.DOI),
+			byteSliceToString(paper.Metadata),
+			strconv.FormatBool(paper.EmbeddingProcessed),
+			paper.Topic,
+			paper.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal("Row iteration error:", err)
+	}
+}
+
+func nullableString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func byteSliceToString(b *[]byte) string {
+	if b == nil {
+		return ""
+	}
+	return string(*b)
 }
