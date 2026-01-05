@@ -1,0 +1,3 @@
+[submodule "embedding_engine"]
+	path = embedding_engine
+	url = https://github.com/Aum-Patel1234/pdf-embedding-pipeline
