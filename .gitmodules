@@ -1,3 +1,6 @@
 [submodule "embedding_engine"]
 	path = embedding_engine
 	url = https://github.com/Aum-Patel1234/pdf-embedding-pipeline
+[submodule "embedding_server"]
+	path = embedding_server
+	url = https://github.com/Aum-Patel1234/researchq_embedding_server
