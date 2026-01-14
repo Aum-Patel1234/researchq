@@ -20,6 +20,19 @@ class Config:
     CHUNK_SIZE = 500
     CHUNK_OVERLAP = 50
 
+    # Embedding server configuration
+    EMBEDDING_SERVER_URL = os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8000")
+
+    # Database configuration
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/final_year_rag"
+    )
+
+    # FAISS index path
+    FAISS_INDEX_PATH = os.getenv(
+        "FAISS_INDEX_PATH", "embedding_engine/build/paper.faiss"
+    )
+
     DEFAULT_URLS = [
         # Attention Is All You Need (Transformer)
         "https://arxiv.org/pdf/1706.03762.pdf",

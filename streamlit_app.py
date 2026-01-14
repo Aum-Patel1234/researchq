@@ -25,7 +25,10 @@ from src.document_ingestion.document_processor import (
     DocumentProcessor as DocumentProcessorClass,
 )
 
-from src.vectorstore.vectorstore import VectorStore as VectorStoreClass
+from src.vectorstore.vectorstore import (
+    VectorStore as VectorStoreClass,
+    FAISSVectorStore as FAISSVectorStoreClass,
+)
 from src.graph_builder.graph_builder import GraphBuilder as GraphBuilderClass
 from src.state.rag_state import RAGState as RAGStateClass
 from src.streamlithelper import display_rag_result, extract_answer_from_result
@@ -201,20 +204,39 @@ def get_llm():
 
 
 @st.cache_resource(show_spinner=False)
-def get_vector_store(embedding_model: str | None = None):
-    """Initialize and return VectorStore with error handling."""
-    if not components["VectorStore"]:
-        raise ImportError("VectorStore not available. Check the logs for details.")
+def get_vector_store():
+    """Initialize and return FAISSVectorStore with error handling."""
+    if not components["Config"]:
+        raise ImportError("Config not available. Check the logs for details.")
 
     try:
-        logger.info(f"Initializing VectorStore with embedding_model={embedding_model}")
-        if embedding_model:
-            return components["VectorStore"](embedding_model=embedding_model)
-        return components["VectorStore"](
-            embedding_model="sentence-transformers/all-mpnet-base-v2"
+        config = components["Config"]
+        # Get FAISS path and resolve it relative to project root
+        faiss_path = getattr(config, "FAISS_INDEX_PATH", "embedding_engine/build/paper.faiss")
+        # Resolve to absolute path if relative
+        from pathlib import Path
+        faiss_path_obj = Path(faiss_path)
+        if not faiss_path_obj.is_absolute():
+            # Resolve relative to project root
+            project_root = Path(__file__).parent
+            faiss_path = str(project_root / faiss_path)
+        
+        embedding_server_url = getattr(config, "EMBEDDING_SERVER_URL", "http://localhost:8000")
+        database_url = getattr(config, "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/final_year_rag")
+        
+        logger.info(f"Initializing FAISSVectorStore")
+        logger.info(f"FAISS path: {faiss_path}")
+        logger.info(f"Embedding server: {embedding_server_url}")
+        logger.info(f"Database: {database_url[:30]}...")  # Don't log full password
+        
+        return FAISSVectorStoreClass(
+            faiss_index_path=faiss_path,
+            embedding_server_url=embedding_server_url,
+            database_url=database_url,
+            embedding_dim=768,  # BGE models typically use 768
         )
     except Exception as e:
-        logger.error(f"Error initializing VectorStore: {str(e)}")
+        logger.error(f"Error initializing FAISSVectorStore: {str(e)}")
         logger.debug(traceback.format_exc())
         raise
 
@@ -294,178 +316,124 @@ def main():
         )
 
     # Initialize session state
-    if "documents" not in st.session_state:
-        st.session_state.documents = []
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
     if "retriever" not in st.session_state:
         st.session_state.retriever = None
 
-    # Sidebar for document upload
+    # Sidebar for configuration
     with st.sidebar:
-        st.header("📂 Document Upload")
-
-        # File upload
-        uploaded_files = st.file_uploader(
-            "Upload PDFs or text files", type=["pdf", "txt"], accept_multiple_files=True
-        )
-
-        # URL input
-        st.subheader("Or enter URLs")
-        default_urls = []
-        if components["Config"]:
-            default_urls = getattr(components["Config"], "DEFAULT_URLS", [])
-        urls = st.text_area(
-            "Enter one URL per line",
-            value="\n".join(default_urls) if default_urls else "",
-            height=100,
-        )
-
-        process_btn = st.button("Process Documents", type="primary")
-
-    # Process documents when button is clicked
-    if process_btn:
-        with st.spinner("Processing documents..."):
-            try:
-                processor = get_document_processor()
-                docs = []
-
-                # Process uploaded files
-                for uploaded_file in uploaded_files:
-                    try:
-                        file_path = save_uploaded_file(uploaded_file)
-                        if file_path.suffix.lower() == ".pdf":
-                            file_docs = processor.load_from_pdf(file_path)
-                        else:
-                            with open(file_path, "r") as f:
-                                text = f.read()
-                                from langchain_core.documents import Document
-
-                                file_docs = [Document(page_content=text)]
-                        docs.extend(file_docs)
-                        os.unlink(file_path)  # Clean up temp file
-                    except Exception as e:
-                        st.error(f"Error processing {uploaded_file.name}: {str(e)}")
-                        logger.error(f"Error processing {uploaded_file.name}: {str(e)}")
-                        logger.debug(traceback.format_exc())
-
-                # Process URLs
-                for url in urls.strip().split("\n"):
-                    url = url.strip()
-                    if not url:
-                        continue
-                    try:
-                        if url.lower().endswith(".pdf"):
-                            url_docs = processor.load_pdf_from_url(url)
-                        else:
-                            url_docs = processor.load_from_url(url)
-                        docs.extend(url_docs)
-                    except Exception as e:
-                        st.error(f"Error processing URL {url}: {str(e)}")
-                        logger.error(f"Error processing URL {url}: {str(e)}")
-                        logger.debug(traceback.format_exc())
-
-                if docs:
-                    # Split documents into chunks
-                    split_docs = processor.split_documents(docs)
-                    st.session_state.documents = split_docs
-
-                    # Initialize vector store
-                    embedding_model = getattr(
-                        components["Config"], "EMBEDDING_MODEL", None
-                    )
-                    vector_store = get_vector_store(embedding_model)
-                    vector_store.create_retriever(split_docs)
+        st.header("⚙️ Configuration")
+        st.info("Using pre-built FAISS index and PostgreSQL database")
+        
+        # Initialize vector store button
+        init_btn = st.button("Initialize Vector Store", type="primary")
+        
+        if init_btn or st.session_state.vector_store is None:
+            with st.spinner("Initializing vector store..."):
+                try:
+                    vector_store = get_vector_store()
                     st.session_state.vector_store = vector_store
                     st.session_state.retriever = vector_store.get_retriever()
-
-                    st.success(f"✅ Processed {len(split_docs)} document chunks")
+                    st.success("✅ Vector store initialized successfully!")
                     if debug_mode:
-                        st.json(
-                            {
-                                "Total Documents": len(split_docs),
-                                "Sample Document": {
-                                    "content": split_docs[0].page_content[:200] + "...",
-                                    "metadata": split_docs[0].metadata,
-                                },
-                            }
-                        )
-                else:
-                    st.warning("No valid documents were processed.")
-
-            except Exception as e:
-                st.error(f"An error occurred while processing documents: {str(e)}")
-                logger.error(f"Document processing error: {str(e)}")
-                logger.debug(traceback.format_exc())
-
-    # Display processed documents if available
-    if st.session_state.documents:
-        display_document_info(st.session_state.documents)
-
-        # Question input
-        st.divider()
-        st.subheader("❓ Ask a Question")
-        question = st.text_input("Enter your question about the documents")
-
-        if question:
-            with st.spinner("Searching for answers..."):
-                try:
-                    if not st.session_state.retriever:
-                        raise ValueError(
-                            "Document retriever not initialized. Please process documents first."
-                        )
-
-                    # Get relevant documents (retriever.invoke returns list of documents)
-                    relevant_docs = st.session_state.retriever.invoke(question)
-
-                    # Display relevant documents
-                    st.subheader("📚 Relevant Context")
-                    for i, doc in enumerate(relevant_docs[:3], 1):  # Show top 3
-                        with st.expander(f"Context {i}"):
-                            st.write(doc.page_content)
-                            st.caption(
-                                f"Source: {doc.metadata.get('source', 'Unknown')}"
-                            )
-
-                    # Generate answer using LLM and GraphBuilder
-                    llm = get_llm()
-
-                    # Initialize graph builder
-                    graph_builder = components["GraphBuilder"](
-                        retriever=st.session_state.retriever, llm=llm
-                    )
-
-                    # Run the graph
-                    result = graph_builder.run(question)
-
-                    # Display answer (result is RAGState object)
-                    st.subheader("💡 Answer")
-                    display_rag_result(result)
-
-                    # Debug info
-                    if debug_mode:
-                        answer_text = extract_answer_from_result(result)
-                        st.subheader("🔍 Debug Information")
-                        st.json(
-                            {
-                                "Question": question,
-                                "Retrieved Documents": len(relevant_docs),
-                                "Answer Length": len(answer_text) if answer_text else 0,
-                                "Result Type": type(result).__name__,
-                                "Has Answer Attribute": hasattr(result, "answer"),
-                            }
-                        )
-
+                        st.json({
+                            "FAISS Index": f"{vector_store.index.ntotal} vectors",
+                            "Embedding Dimension": vector_store.embedding_dim,
+                            "Embedding Server": vector_store.embedding_server_url,
+                        })
                 except Exception as e:
-                    st.error(f"An error occurred while generating an answer: {str(e)}")
-                    logger.error(f"Answer generation error: {str(e)}")
+                    st.error(f"Failed to initialize vector store: {str(e)}")
+                    logger.error(f"Vector store initialization error: {str(e)}")
                     logger.debug(traceback.format_exc())
 
-    # Display error if no documents processed
-    elif process_btn:
-        st.warning(
-            "No documents were processed. Please check your inputs and try again."
-        )
+    # Question input
+    st.divider()
+    st.subheader("❓ Ask a Question")
+    question = st.text_input("Enter your question about the research papers")
+
+    if question and st.session_state.retriever:
+        with st.spinner("Searching for answers..."):
+            try:
+                # Get relevant documents (retriever.invoke returns list of documents)
+                relevant_docs = st.session_state.retriever.invoke(question)
+
+                # Display vectors and chunks information
+                st.subheader("🔍 Retrieved Vectors & Chunks")
+                st.info(f"Found {len(relevant_docs)} relevant chunks")
+                
+                # Print vectors and chunks info
+                for i, doc in enumerate(relevant_docs, 1):
+                    with st.expander(f"Chunk {i} - Score: {doc.metadata.get('similarity_score', 'N/A'):.4f}"):
+                        st.write("**Chunk Text:**")
+                        st.write(doc.page_content)
+                        st.write("**Metadata:**")
+                        st.json({
+                            "Chunk ID": doc.metadata.get("chunk_id"),
+                            "Document ID": doc.metadata.get("document_id"),
+                            "Paper Title": doc.metadata.get("paper_title"),
+                            "Authors": doc.metadata.get("authors"),
+                            "DOI": doc.metadata.get("doi"),
+                            "Source": doc.metadata.get("source"),
+                            "Page Number": doc.metadata.get("page_number"),
+                            "Chunk Index": doc.metadata.get("chunk_index"),
+                            "Similarity Score": doc.metadata.get("similarity_score"),
+                        })
+                        
+                        # Print to console/logs
+                        logger.info(f"\n{'='*60}")
+                        logger.info(f"CHUNK {i}")
+                        logger.info(f"{'='*60}")
+                        logger.info(f"Chunk ID: {doc.metadata.get('chunk_id')}")
+                        logger.info(f"Similarity Score: {doc.metadata.get('similarity_score')}")
+                        logger.info(f"Paper: {doc.metadata.get('paper_title')}")
+                        logger.info(f"Authors: {doc.metadata.get('authors')}")
+                        logger.info(f"Chunk Text (first 300 chars): {doc.page_content[:300]}...")
+                        logger.info(f"Full Chunk Text:\n{doc.page_content}")
+
+                # Display relevant documents summary
+                st.subheader("📚 Relevant Context Summary")
+                for i, doc in enumerate(relevant_docs[:5], 1):  # Show top 5
+                    st.write(f"**{i}. {doc.metadata.get('paper_title', 'Unknown Paper')}**")
+                    st.caption(f"Authors: {doc.metadata.get('authors', 'Unknown')} | Score: {doc.metadata.get('similarity_score', 0):.4f}")
+                    st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                    st.divider()
+
+                # Generate answer using LLM and GraphBuilder
+                llm = get_llm()
+
+                # Initialize graph builder
+                graph_builder = components["GraphBuilder"](
+                    retriever=st.session_state.retriever, llm=llm
+                )
+
+                # Run the graph
+                result = graph_builder.run(question)
+
+                # Display answer (result is RAGState object)
+                st.subheader("💡 Answer")
+                display_rag_result(result)
+
+                # Debug info
+                if debug_mode:
+                    answer_text = extract_answer_from_result(result)
+                    st.subheader("🔍 Debug Information")
+                    st.json(
+                        {
+                            "Question": question,
+                            "Retrieved Documents": len(relevant_docs),
+                            "Answer Length": len(answer_text) if answer_text else 0,
+                            "Result Type": type(result).__name__,
+                            "Has Answer Attribute": hasattr(result, "answer"),
+                        }
+                    )
+
+            except Exception as e:
+                st.error(f"An error occurred while generating an answer: {str(e)}")
+                logger.error(f"Answer generation error: {str(e)}")
+                logger.debug(traceback.format_exc())
+    elif question:
+        st.warning("Please initialize the vector store first using the sidebar.")
 
 
 if __name__ == "__main__":

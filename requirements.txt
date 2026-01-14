@@ -13,4 +13,5 @@ beautifulsoup4
 requests
 streamlit
 pypdf
+psycopg2-binary
 # wikipedia
