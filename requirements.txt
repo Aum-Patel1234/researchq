@@ -14,4 +14,5 @@ requests
 streamlit
 pypdf
 psycopg2-binary
+ruff
 # wikipedia

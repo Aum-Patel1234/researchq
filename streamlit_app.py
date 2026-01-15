@@ -212,23 +212,32 @@ def get_vector_store():
     try:
         config = components["Config"]
         # Get FAISS path and resolve it relative to project root
-        faiss_path = getattr(config, "FAISS_INDEX_PATH", "embedding_engine/build/paper.faiss")
+        faiss_path = getattr(
+            config, "FAISS_INDEX_PATH", "embedding_engine/build/paper.faiss"
+        )
         # Resolve to absolute path if relative
         from pathlib import Path
+
         faiss_path_obj = Path(faiss_path)
         if not faiss_path_obj.is_absolute():
             # Resolve relative to project root
             project_root = Path(__file__).parent
             faiss_path = str(project_root / faiss_path)
-        
-        embedding_server_url = getattr(config, "EMBEDDING_SERVER_URL", "http://localhost:8000")
-        database_url = getattr(config, "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/final_year_rag")
-        
-        logger.info(f"Initializing FAISSVectorStore")
+
+        embedding_server_url = getattr(
+            config, "EMBEDDING_SERVER_URL", "http://localhost:8000"
+        )
+        database_url = getattr(
+            config,
+            "DATABASE_URL",
+            "postgresql://postgres:postgres@localhost:5432/final_year_rag",
+        )
+
+        logger.info("Initializing FAISSVectorStore")
         logger.info(f"FAISS path: {faiss_path}")
         logger.info(f"Embedding server: {embedding_server_url}")
         logger.info(f"Database: {database_url[:30]}...")  # Don't log full password
-        
+
         return FAISSVectorStoreClass(
             faiss_index_path=faiss_path,
             embedding_server_url=embedding_server_url,
@@ -325,10 +334,10 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
         st.info("Using pre-built FAISS index and PostgreSQL database")
-        
+
         # Initialize vector store button
         init_btn = st.button("Initialize Vector Store", type="primary")
-        
+
         if init_btn or st.session_state.vector_store is None:
             with st.spinner("Initializing vector store..."):
                 try:
@@ -337,11 +346,13 @@ def main():
                     st.session_state.retriever = vector_store.get_retriever()
                     st.success("✅ Vector store initialized successfully!")
                     if debug_mode:
-                        st.json({
-                            "FAISS Index": f"{vector_store.index.ntotal} vectors",
-                            "Embedding Dimension": vector_store.embedding_dim,
-                            "Embedding Server": vector_store.embedding_server_url,
-                        })
+                        st.json(
+                            {
+                                "FAISS Index": f"{vector_store.index.ntotal} vectors",
+                                "Embedding Dimension": vector_store.embedding_dim,
+                                "Embedding Server": vector_store.embedding_server_url,
+                            }
+                        )
                 except Exception as e:
                     st.error(f"Failed to initialize vector store: {str(e)}")
                     logger.error(f"Vector store initialization error: {str(e)}")
@@ -361,42 +372,60 @@ def main():
                 # Display vectors and chunks information
                 st.subheader("🔍 Retrieved Vectors & Chunks")
                 st.info(f"Found {len(relevant_docs)} relevant chunks")
-                
+
                 # Print vectors and chunks info
                 for i, doc in enumerate(relevant_docs, 1):
-                    with st.expander(f"Chunk {i} - Score: {doc.metadata.get('similarity_score', 'N/A'):.4f}"):
+                    with st.expander(
+                        f"Chunk {i} - Score: {doc.metadata.get('similarity_score', 'N/A'):.4f}"
+                    ):
                         st.write("**Chunk Text:**")
                         st.write(doc.page_content)
                         st.write("**Metadata:**")
-                        st.json({
-                            "Chunk ID": doc.metadata.get("chunk_id"),
-                            "Document ID": doc.metadata.get("document_id"),
-                            "Paper Title": doc.metadata.get("paper_title"),
-                            "Authors": doc.metadata.get("authors"),
-                            "DOI": doc.metadata.get("doi"),
-                            "Source": doc.metadata.get("source"),
-                            "Page Number": doc.metadata.get("page_number"),
-                            "Chunk Index": doc.metadata.get("chunk_index"),
-                            "Similarity Score": doc.metadata.get("similarity_score"),
-                        })
-                        
+                        st.json(
+                            {
+                                "Chunk ID": doc.metadata.get("chunk_id"),
+                                "Document ID": doc.metadata.get("document_id"),
+                                "Paper Title": doc.metadata.get("paper_title"),
+                                "Authors": doc.metadata.get("authors"),
+                                "DOI": doc.metadata.get("doi"),
+                                "Source": doc.metadata.get("source"),
+                                "Page Number": doc.metadata.get("page_number"),
+                                "Chunk Index": doc.metadata.get("chunk_index"),
+                                "Similarity Score": doc.metadata.get(
+                                    "similarity_score"
+                                ),
+                            }
+                        )
+
                         # Print to console/logs
                         logger.info(f"\n{'='*60}")
                         logger.info(f"CHUNK {i}")
                         logger.info(f"{'='*60}")
                         logger.info(f"Chunk ID: {doc.metadata.get('chunk_id')}")
-                        logger.info(f"Similarity Score: {doc.metadata.get('similarity_score')}")
+                        logger.info(
+                            f"Similarity Score: {doc.metadata.get('similarity_score')}"
+                        )
                         logger.info(f"Paper: {doc.metadata.get('paper_title')}")
                         logger.info(f"Authors: {doc.metadata.get('authors')}")
-                        logger.info(f"Chunk Text (first 300 chars): {doc.page_content[:300]}...")
+                        logger.info(
+                            f"Chunk Text (first 300 chars): {doc.page_content[:300]}..."
+                        )
                         logger.info(f"Full Chunk Text:\n{doc.page_content}")
 
                 # Display relevant documents summary
                 st.subheader("📚 Relevant Context Summary")
                 for i, doc in enumerate(relevant_docs[:5], 1):  # Show top 5
-                    st.write(f"**{i}. {doc.metadata.get('paper_title', 'Unknown Paper')}**")
-                    st.caption(f"Authors: {doc.metadata.get('authors', 'Unknown')} | Score: {doc.metadata.get('similarity_score', 0):.4f}")
-                    st.write(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                    st.write(
+                        f"**{i}. {doc.metadata.get('paper_title', 'Unknown Paper')}**"
+                    )
+                    st.caption(
+                        f"Authors: {doc.metadata.get('authors', 'Unknown')} | Score: {doc.metadata.get('similarity_score', 0):.4f}"
+                    )
+                    st.write(
+                        doc.page_content[:300] + "..."
+                        if len(doc.page_content) > 300
+                        else doc.page_content
+                    )
                     st.divider()
 
                 # Generate answer using LLM and GraphBuilder

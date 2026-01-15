@@ -2,9 +2,12 @@ import faiss
 import numpy as np
 import requests
 import psycopg2
+from psycopg2.extensions import connection
 from typing import List, Optional, Any
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS as LangChainFAISS
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from pydantic import Field, PrivateAttr
 from pathlib import Path
@@ -48,17 +51,17 @@ class FAISSVectorStore:
             # Remove leading ./ if present
             clean_path = str(faiss_path).lstrip("./")
             faiss_path = Path(clean_path)
-            
+
             # Try to resolve relative to current working directory first
             if not faiss_path.exists():
                 # Try relative to project root (assuming we're in src/vectorstore/)
                 project_root = Path(__file__).parent.parent.parent
                 faiss_path = project_root / clean_path
-                
+
             # If still doesn't exist, try as-is (might be relative to cwd)
             if not faiss_path.exists():
                 faiss_path = Path(faiss_index_path)
-                
+
         self.faiss_index_path = faiss_path.resolve()  # Resolve to absolute path
         self.embedding_server_url = embedding_server_url.rstrip("/")
         self.database_url = database_url
@@ -83,7 +86,7 @@ class FAISSVectorStore:
         logger.info(f"Loaded FAISS index with {self.index.ntotal} vectors")
 
         # Initialize database connection
-        self.conn = None
+        self.conn: connection | None = None
         self._connect_db()
 
         # Create retriever
@@ -177,6 +180,9 @@ class FAISSVectorStore:
         """
 
         try:
+            if self.conn is None:
+                raise RuntimeError("Database connection not initialized")
+
             with self.conn.cursor() as cur:
                 cur.execute(query, (chunk_ids,))
                 rows = cur.fetchall()
@@ -306,9 +312,9 @@ class FAISSVectorStore:
             print(f"Chunk Index: {chunk_data['chunk_index']}")
             print(f"DOI: {chunk_data['doi']}")
             print(f"Source: {chunk_data['source']}")
-            print(f"\nChunk Text (first 300 chars):")
+            print("\nChunk Text (first 300 chars):")
             print(f"{chunk_data['chunk_text'][:300]}...")
-            print(f"\nFull Chunk Text:")
+            print("\nFull Chunk Text:")
             print(f"{chunk_data['chunk_text']}")
             print(f"{'='*60}\n")
 
@@ -352,16 +358,20 @@ class FAISSVectorStore:
 
 class FAISSRetriever(BaseRetriever):
     """LangChain retriever wrapper for FAISSVectorStore."""
-    
+
     # Use PrivateAttr for attributes that shouldn't be part of Pydantic model
     _vector_store: Any = PrivateAttr()
     search_kwargs: dict = Field(default_factory=lambda: {"k": 4})
 
-    def __init__(self, vector_store: FAISSVectorStore, search_kwargs: dict = None, **kwargs):
+    def __init__(
+        self,
+        vector_store: FAISSVectorStore,
+        search_kwargs: dict | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self._vector_store = vector_store
-        if search_kwargs:
-            self.search_kwargs = search_kwargs
+        self.search_kwargs = search_kwargs or {}
 
     def _get_relevant_documents(
         self,
@@ -377,11 +387,6 @@ class FAISSRetriever(BaseRetriever):
     def vectorstore(self):
         """Return the underlying vector store."""
         return self._vector_store
-
-
-# Keep the old VectorStore class for backward compatibility
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS as LangChainFAISS
 
 
 class VectorStore:
