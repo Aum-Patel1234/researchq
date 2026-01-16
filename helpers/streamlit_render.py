@@ -9,12 +9,12 @@ from typing import Any
 def extract_answer_from_result(result: Any) -> str:
     """
     Extract the answer text from a RAG result.
-    
+
     Parameters
     ----------
     result : Any
         The result from graph_builder.run(), can be RAGState object or dict.
-    
+
     Returns
     -------
     str
@@ -25,13 +25,13 @@ def extract_answer_from_result(result: Any) -> str:
         answer = getattr(result, "answer", None)
         if answer:
             return answer if isinstance(answer, str) else str(answer)
-    
+
     # Try dictionary representation
     if isinstance(result, dict):
         answer = result.get("answer", "")
         if answer:
             return answer if isinstance(answer, str) else str(answer)
-    
+
     # If result is a Pydantic model, try model_dump() or dict() method
     if hasattr(result, "model_dump"):
         try:
@@ -41,7 +41,7 @@ def extract_answer_from_result(result: Any) -> str:
                 return answer if isinstance(answer, str) else str(answer)
         except Exception:
             pass
-    
+
     if hasattr(result, "dict"):
         try:
             result_dict = result.dict()
@@ -50,7 +50,7 @@ def extract_answer_from_result(result: Any) -> str:
                 return answer if isinstance(answer, str) else str(answer)
         except Exception:
             pass
-    
+
     # Fallback: return empty string instead of string representation of whole object
     return ""
 
@@ -58,14 +58,14 @@ def extract_answer_from_result(result: Any) -> str:
 def render_answer(answer_text: str):
     """
     Render the answer text properly formatted in Streamlit.
-    
+
     This function handles markdown formatting, including:
     - Headings and subheadings
     - Lists (ordered and unordered)
     - Code blocks
     - Bold/italic text
     - Paragraphs
-    
+
     Parameters
     ----------
     answer_text : str
@@ -74,7 +74,7 @@ def render_answer(answer_text: str):
     if not answer_text:
         st.warning("No answer generated.")
         return
-    
+
     # Render as markdown to preserve formatting
     st.markdown(answer_text, unsafe_allow_html=False)
 
@@ -82,7 +82,7 @@ def render_answer(answer_text: str):
 def display_rag_result(result: Any):
     """
     Display a RAG result properly formatted in Streamlit.
-    
+
     Parameters
     ----------
     result : Any
@@ -90,4 +90,3 @@ def display_rag_result(result: Any):
     """
     answer_text = extract_answer_from_result(result)
     render_answer(answer_text)
-
