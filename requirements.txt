@@ -15,4 +15,5 @@ streamlit
 pypdf
 psycopg2-binary
 ruff
+numpy
 # wikipedia

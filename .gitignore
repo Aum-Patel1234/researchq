@@ -12,3 +12,5 @@ data/
 
 # Virtual environments
 .venv
+
+*.faiss
